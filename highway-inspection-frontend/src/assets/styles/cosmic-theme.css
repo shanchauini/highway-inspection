@@ -1,0 +1,691 @@
+/* 宇宙主题全局样式 */
+
+/* 深色宇宙背景 */
+.cosmic-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 25%, #0f1419 50%, #1a1f3a 75%, #0a0e27 100%);
+  background-size: 400% 400%;
+  animation: cosmicGradient 20s ease infinite;
+  z-index: -1;
+  overflow: hidden;
+}
+
+@keyframes cosmicGradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* 模糊星球和光效 */
+.cosmic-background::before {
+  content: '';
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(124, 77, 255, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  top: 10%;
+  left: 10%;
+  filter: blur(80px);
+  animation: planetFloat 20s ease-in-out infinite;
+}
+
+.cosmic-background::after {
+  content: '';
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(79, 195, 247, 0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  bottom: 15%;
+  right: 15%;
+  filter: blur(80px);
+  animation: planetFloat 25s ease-in-out infinite reverse;
+}
+
+@keyframes planetFloat {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(50px, -50px) scale(1.1);
+  }
+}
+
+/* 宇宙风格卡片 */
+.cosmic-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.cosmic-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(124, 77, 255, 0.5), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cosmic-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(124, 77, 255, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border-color: rgba(124, 77, 255, 0.3);
+}
+
+.cosmic-card:hover::before {
+  opacity: 1;
+}
+
+/* 蓝紫渐变标题 */
+.cosmic-title {
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #7c4dff 0%, #4fc3f7 50%, #7c4dff 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 3s ease infinite;
+  margin: 0;
+}
+
+.cosmic-title-large {
+  font-size: 32px;
+}
+
+.cosmic-title-small {
+  font-size: 18px;
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* 次要信息样式 */
+.cosmic-text-secondary {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cosmic-text-muted {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+}
+
+/* 蓝紫渐变按钮 */
+.cosmic-button {
+  background: linear-gradient(135deg, #7c4dff 0%, #4fc3f7 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(124, 77, 255, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.cosmic-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s ease;
+}
+
+.cosmic-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 77, 255, 0.4);
+  background: linear-gradient(135deg, #4fc3f7 0%, #7c4dff 100%);
+}
+
+.cosmic-button:hover::before {
+  left: 100%;
+}
+
+.cosmic-button:active {
+  transform: translateY(0);
+}
+
+/* 按钮选中状态 */
+.cosmic-button.active,
+.cosmic-button.is-active {
+  background: linear-gradient(135deg, #4fc3f7 0%, #7c4dff 100%);
+  box-shadow: 0 0 20px rgba(124, 77, 255, 0.6),
+              inset 0 0 20px rgba(79, 195, 247, 0.2);
+}
+
+/* 蓝紫渐变进度条 */
+.cosmic-progress {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.cosmic-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #7c4dff 0%, #4fc3f7 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(124, 77, 255, 0.5);
+}
+
+/* 卡片内容区域 */
+.cosmic-card-content {
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 卡片头部 */
+.cosmic-card-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 统计数值样式 */
+.cosmic-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #7c4dff 0%, #4fc3f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.cosmic-stat-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+/* 表格样式 */
+.cosmic-table {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* 输入框样式 */
+.cosmic-input {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(124, 77, 255, 0.3) !important;
+  border-radius: 8px !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.cosmic-input:focus {
+  border-color: rgba(124, 77, 255, 0.6) !important;
+  box-shadow: 0 0 15px rgba(124, 77, 255, 0.2) !important;
+}
+
+/* 分隔线 */
+.cosmic-divider {
+  border-color: rgba(255, 255, 255, 0.1);
+  margin: 20px 0;
+}
+
+/* 标签样式 */
+.cosmic-tag {
+  background: rgba(124, 77, 255, 0.2);
+  border: 1px solid rgba(124, 77, 255, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* Element Plus 组件深色主题适配 */
+:deep(.el-card) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.el-card__header) {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.el-card__body) {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* 表格深色主题 */
+:deep(.el-table) {
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.el-table th) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+:deep(.el-table td) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:deep(.el-table tr:hover > td) {
+  background: rgba(124, 77, 255, 0.1) !important;
+}
+
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* 表单深色主题 */
+:deep(.el-form-item__label) {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(124, 77, 255, 0.3) !important;
+  box-shadow: none !important;
+}
+
+:deep(.el-input__inner) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.el-input__wrapper:hover) {
+  border-color: rgba(124, 77, 255, 0.5) !important;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  border-color: rgba(124, 77, 255, 0.6) !important;
+  box-shadow: 0 0 10px rgba(124, 77, 255, 0.2) !important;
+}
+
+:deep(.el-select .el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(124, 77, 255, 0.3) !important;
+}
+
+:deep(.el-select-dropdown) {
+  background: rgba(26, 31, 58, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(20px);
+}
+
+:deep(.el-select-dropdown__item) {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:deep(.el-select-dropdown__item:hover) {
+  background: rgba(124, 77, 255, 0.2) !important;
+}
+
+:deep(.el-select-dropdown__item.is-selected) {
+  background: rgba(124, 77, 255, 0.3) !important;
+  color: #fff !important;
+}
+
+/* 标签深色主题 */
+:deep(.el-tag) {
+  background: rgba(124, 77, 255, 0.2) !important;
+  border: 1px solid rgba(124, 77, 255, 0.4) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* 分页深色主题 */
+:deep(.el-pagination) {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:deep(.el-pagination .el-pager li) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:deep(.el-pagination .el-pager li.is-active) {
+  background: linear-gradient(135deg, #7c4dff 0%, #4fc3f7 100%) !important;
+  color: #fff !important;
+}
+
+:deep(.el-pagination button) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* 对话框深色主题 */
+:deep(.el-dialog) {
+  background: rgba(26, 31, 58, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(20px);
+}
+
+:deep(.el-dialog__header) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+:deep(.el-dialog__title) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.el-dialog__body) {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* 空状态深色主题 */
+:deep(.el-empty) {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+:deep(.el-empty__description) {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* 表单区域样式 */
+.cosmic-form-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 标签样式增强 */
+:deep(.el-form-item__label) {
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-weight: 500;
+}
+
+/* 按钮组样式 */
+.cosmic-button-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 小尺寸按钮 */
+.cosmic-button-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  height: auto;
+}
+
+/* 表格操作按钮样式 */
+:deep(.el-table .el-button) {
+  background: rgba(124, 77, 255, 0.2) !important;
+  border: 1px solid rgba(124, 77, 255, 0.4) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-table .el-button:hover) {
+  background: rgba(124, 77, 255, 0.4) !important;
+  border-color: rgba(124, 77, 255, 0.6) !important;
+  box-shadow: 0 0 10px rgba(124, 77, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+:deep(.el-table .el-button--primary) {
+  background: linear-gradient(135deg, rgba(124, 77, 255, 0.3), rgba(79, 195, 247, 0.3)) !important;
+  border-color: rgba(124, 77, 255, 0.5) !important;
+}
+
+:deep(.el-table .el-button--success) {
+  background: linear-gradient(135deg, rgba(79, 195, 247, 0.3), rgba(102, 187, 106, 0.3)) !important;
+  border-color: rgba(79, 195, 247, 0.5) !important;
+}
+
+:deep(.el-table .el-button--warning) {
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.3), rgba(255, 152, 0, 0.3)) !important;
+  border-color: rgba(255, 193, 7, 0.5) !important;
+}
+
+/* 单选按钮组样式 */
+:deep(.el-radio-group) {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+:deep(.el-radio-button__inner) {
+  background: transparent !important;
+  border: 1px solid rgba(124, 77, 255, 0.3) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+:deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: linear-gradient(135deg, #7c4dff 0%, #4fc3f7 100%) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 0 10px rgba(124, 77, 255, 0.5);
+}
+
+/* 标签页样式 */
+:deep(.el-tabs) {
+  background: transparent;
+}
+
+:deep(.el-tabs__header) {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px 8px 0 0;
+  padding: 0 16px;
+}
+
+:deep(.el-tabs__item) {
+  color: #fff !important;
+  border-bottom: 2px solid transparent;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: #fff !important;
+  border-bottom-color: #7c4dff;
+}
+
+:deep(.el-tabs__active-bar) {
+  background: linear-gradient(90deg, #7c4dff 0%, #4fc3f7 100%);
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 图例样式 */
+.cosmic-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid;
+}
+
+/* 文字对比度增强 */
+.cosmic-title,
+.cosmic-title-small,
+.cosmic-title-large {
+  text-shadow: 0 0 10px rgba(124, 77, 255, 0.5);
+}
+
+/* 确保所有文本在深色背景上清晰可见 */
+.cosmic-card,
+.cosmic-form-section {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* 面板标题样式 */
+.panel-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-title span {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+/* 键值对样式 */
+.kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.kv .k {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.kv .v {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 400;
+}
+
+/* 任务项样式 */
+.mission-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.mission-item:hover {
+  background: rgba(124, 77, 255, 0.1);
+  border-color: rgba(124, 77, 255, 0.3);
+  transform: translateX(4px);
+}
+
+.mission-item.active {
+  background: rgba(124, 77, 255, 0.2);
+  border-color: rgba(124, 77, 255, 0.5);
+  box-shadow: 0 0 15px rgba(124, 77, 255, 0.3);
+}
+
+/* 统计图标样式增强 */
+.stat-icon {
+  font-size: 48px;
+  background: linear-gradient(135deg, #7c4dff 0%, #4fc3f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 8px rgba(124, 77, 255, 0.5));
+}
+
+/* 表格容器滚动条样式 */
+.cosmic-scrollable,
+.table-wrapper {
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+}
+
+.cosmic-scrollable::-webkit-scrollbar,
+.table-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cosmic-scrollable::-webkit-scrollbar-track,
+.table-wrapper::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.cosmic-scrollable::-webkit-scrollbar-thumb,
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #7c4dff 0%, #4fc3f7 100%);
+  border-radius: 10px;
+  box-shadow: 0 0 8px rgba(124, 77, 255, 0.5);
+  transition: all 0.3s ease;
+}
+
+.cosmic-scrollable::-webkit-scrollbar-thumb:hover,
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #4fc3f7 0%, #7c4dff 100%);
+  box-shadow: 0 0 12px rgba(124, 77, 255, 0.8);
+}
+
+.cosmic-scrollable,
+.table-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 77, 255, 0.6) rgba(255, 255, 255, 0.05);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .cosmic-title-large {
+    font-size: 24px;
+  }
+  
+  .cosmic-title {
+    font-size: 20px;
+  }
+  
+  .cosmic-card-content {
+    padding: 16px;
+  }
+  
+  .cosmic-button-group {
+    flex-direction: column;
+  }
+  
+  .cosmic-button {
+    width: 100%;
+  }
+}
+
