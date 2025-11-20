@@ -608,12 +608,13 @@ const loadDashboardData = async () => {
     })()
 
     // 加载统计数据 - 使用dashboardApi
-    const [statsRes, flightStatsRes, airspaceUsageRes, alertStatsRes, alertTrendRes] = await Promise.all([
+    const [statsRes, flightStatsRes, airspaceUsageRes, alertStatsRes, alertTrendRes, flightTrendRes] = await Promise.all([
       dashboardApi.getStats(params),
       dashboardApi.getFlightStats(params),
       dashboardApi.getAirspaceUsage(params),
       dashboardApi.getAlertStats(params),
-      dashboardApi.getAlertTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [] } }))
+      dashboardApi.getAlertTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [] } })),
+      dashboardApi.getFlightTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [], hours: [] } }))
     ])
     
     // 飞行统计卡片
@@ -626,13 +627,12 @@ const loadDashboardData = async () => {
     }
 
     // 飞行趋势
-    if (statsRes.code === 200 && statsRes.data) {
-      // 从statsRes.data中获取飞行趋势数据
-      const flightTrendData = statsRes.data.flight_trend || { dates: [], counts: [], hours: [] };
+    if (flightTrendRes.code === 200 && flightTrendRes.data) {
+      // 从flightTrendRes.data中获取飞行趋势数据
       flightTrend.value = {
-        dates: flightTrendData.dates || [],
-        counts: flightTrendData.counts || [],
-        hours: flightTrendData.hours || []
+        dates: flightTrendRes.data.dates || [],
+        counts: flightTrendRes.data.counts || [],
+        hours: flightTrendRes.data.hours || []
       }
     } else {
       flightTrend.value = { dates: [], counts: [], hours: [] }

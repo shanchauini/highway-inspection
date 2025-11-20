@@ -147,10 +147,18 @@
         </el-form-item>
 
         <el-form-item label="角色" prop="role">
-          <el-select v-model="userForm.role" placeholder="请选择角色" style="width: 100%">
+          <el-select 
+            v-model="userForm.role" 
+            placeholder="请选择角色" 
+            style="width: 100%"
+            :disabled="isCurrentUser(editingUser) && userForm.role === 'admin'"
+          >
             <el-option label="管理员" value="admin" />
             <el-option label="操作员" value="operator" />
           </el-select>
+          <div v-if="isCurrentUser(editingUser) && userForm.role === 'admin'" class="el-form-item-message">
+            不能修改自己的管理员角色
+          </div>
         </el-form-item>
 
         <el-form-item v-if="editingUser" label="新密码" prop="newPassword">
@@ -302,6 +310,12 @@ const saveUser = async () => {
           // 如果输入了新密码，则更新密码
           if (userForm.value.newPassword) {
             updates.password = userForm.value.newPassword
+          }
+          
+          // 检查是否是当前用户试图修改自己的角色
+          if (isCurrentUser(editingUser.value) && userForm.value.role !== 'admin') {
+            ElMessage.error('不能将自己从管理员降级为操作员')
+            return
           }
           
           await usersStore.updateUser(editingUser.value.id, updates)
@@ -488,6 +502,14 @@ onMounted(() => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+.el-form-item-message {
+  color: #F56C6C;
+  font-size: 12px;
+  line-height: 1.5;
+  padding-top: 4px;
+  min-height: 18px;
 }
 </style>
 

@@ -84,6 +84,10 @@ import { computed, onMounted, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useMissionStore, type Mission } from '@/stores/mission'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+
+dayjs.extend(utc)
 
 const missionStore = useMissionStore()
 const keyword = ref('')
@@ -116,7 +120,8 @@ let routeLayer: L.Polyline<any> | null = null
 
 const formatTime = (t?: string | null) => {
   if (!t) return '-'
-  return new Date(t).toLocaleString()
+  // UTC时间转换为本地时间显示
+  return dayjs.utc(t).local().format('YYYY/MM/DD HH:mm:ss')
 }
 
 const coordsFromRoute = (route: any): Array<[number, number]> => {

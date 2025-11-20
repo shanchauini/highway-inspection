@@ -119,3 +119,26 @@ def get_alert_trend():
     except Exception as e:
         return error_response(f'获取告警趋势失败: {str(e)}', 500)
 
+
+@dashboard_bp.route('/flight-trend', methods=['GET'])
+@login_required
+def get_flight_trend():
+    """获取飞行任务趋势"""
+    try:
+        start_date_str = request.args.get('start_date', None)
+        end_date_str = request.args.get('end_date', None)
+
+        start_date = None
+        end_date = None
+
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+
+        data = DashboardService.get_flight_trend(start_date=start_date, end_date=end_date)
+
+        return success_response(data=data)
+
+    except Exception as e:
+        return error_response(f'获取飞行任务趋势失败: {str(e)}', 500)

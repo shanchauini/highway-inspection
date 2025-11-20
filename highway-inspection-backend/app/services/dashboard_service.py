@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import func
+from sqlalchemy import func, text
 from app.models import db, Mission, AlertEvent, AirspaceUsage, Airspace
 
 
@@ -33,6 +33,66 @@ class DashboardService:
             'total_duration': round(total_duration, 2),
             'average_duration': round(total_duration / total_missions, 2) if total_missions > 0 else 0
         }
+
+    @staticmethod
+    def get_flight_trend(days=30, start_date=None, end_date=None):
+        """获取飞行任务趋势"""
+        trend = []
+        return trend
+        '''  有bug暂未修复
+        
+        # 如果指定了日期范围，则使用该范围
+        if start_date and end_date:
+            # 计算日期范围内的天数
+            days = (end_date - start_date).days + 1
+        else:
+            # 默认使用最近30天
+            end_date = datetime.now(timezone.utc).replace(tzinfo=None)
+            start_date = end_date - timedelta(days=days-1)
+        
+        # 使用原生SQL查询飞行任务趋势数据
+        sql = text("""
+            SELECT 
+                DATE(start_time) as date,
+                COUNT(id) as count,
+                SUM(TIMESTAMPDIFF(SECOND, start_time, end_time)) / 3600 as hours
+            FROM missions 
+            WHERE status = 'completed' 
+                AND start_time >= :start_date 
+                AND start_time <= :end_date 
+            GROUP BY DATE(start_time)
+            ORDER BY date
+        """)
+        
+        result = db.session.execute(sql, {
+            'start_date': start_date,
+            'end_date': end_date
+        })
+        
+        
+        # 获取查询结果
+        rows = result.fetchall()
+        
+        # 构建完整的日期序列
+        trend = []
+        for i in range(days):
+            date = (start_date + timedelta(days=i)).date()
+            count = 0
+            hours = 0
+            for row in rows:
+                if row.date == date:
+                    count = row.count
+                    hours = row.hours if row.hours else 0
+                    break
+            trend.append({
+                'date': date.isoformat(),
+                'count': count,
+                'hours': round(hours, 2)
+            })
+        
+    
+        return trend
+        '''
 
     @staticmethod
     def get_airspace_usage_statistics(start_date=None, end_date=None):
@@ -169,4 +229,3 @@ class DashboardService:
             'alert_statistics': alert_stats,
             'alert_trend': alert_trend
         }
-

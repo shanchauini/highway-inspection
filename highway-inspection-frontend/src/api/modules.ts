@@ -255,5 +255,10 @@ export const dashboardApi = {
   // 获取告警趋势
   getAlertTrend: (params?: any) => {
     return api.get('/dashboard/alert-trend', { params })
+  },
+
+  // 获取飞行任务趋势
+  getFlightTrend: (params?: any) => {
+    return api.get('/dashboard/flight-trend', { params })
   }
 }
