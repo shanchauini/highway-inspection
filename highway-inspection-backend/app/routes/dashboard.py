@@ -110,9 +110,24 @@ def get_alert_stats():
 def get_alert_trend():
     """获取告警趋势"""
     try:
-        days = request.args.get('days', 7, type=int)
+        start_date_str = request.args.get('start_date', None)
+        end_date_str = request.args.get('end_date', None)
+        
+        start_date = None
+        end_date = None
+        
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
 
-        data = DashboardService.get_alert_trend(days)
+        # 如果提供了开始和结束日期，则使用日期范围
+        if start_date and end_date:
+            data = DashboardService.get_alert_trend(start_date=start_date, end_date=end_date)
+        else:
+            # 否则使用默认的天数参数
+            days = request.args.get('days', 7, type=int)
+            data = DashboardService.get_alert_trend(days=days)
 
         return success_response(data=data)
 
@@ -142,3 +157,51 @@ def get_flight_trend():
 
     except Exception as e:
         return error_response(f'获取飞行任务趋势失败: {str(e)}', 500)
+
+
+@dashboard_bp.route('/inspection-results', methods=['GET'])
+@login_required
+def get_inspection_results():
+    """获取巡检成果统计"""
+    try:
+        start_date_str = request.args.get('start_date', None)
+        end_date_str = request.args.get('end_date', None)
+
+        start_date = None
+        end_date = None
+
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+
+        data = DashboardService.get_inspection_results(start_date, end_date)
+
+        return success_response(data=data)
+
+    except Exception as e:
+        return error_response(f'获取巡检成果统计失败: {str(e)}', 500)
+
+
+@dashboard_bp.route('/problem-sections', methods=['GET'])
+@login_required
+def get_problem_sections():
+    """获取高频问题路段"""
+    try:
+        start_date_str = request.args.get('start_date', None)
+        end_date_str = request.args.get('end_date', None)
+
+        start_date = None
+        end_date = None
+
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+
+        data = DashboardService.get_problem_sections(start_date, end_date)
+
+        return success_response(data=data)
+
+    except Exception as e:
+        return error_response(f'获取高频问题路段失败: {str(e)}', 500)

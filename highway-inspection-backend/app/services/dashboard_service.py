@@ -37,62 +37,84 @@ class DashboardService:
     @staticmethod
     def get_flight_trend(days=30, start_date=None, end_date=None):
         """获取飞行任务趋势"""
-        trend = []
-        return trend
-        '''  有bug暂未修复
-        
-        # 如果指定了日期范围，则使用该范围
+
         if start_date and end_date:
-            # 计算日期范围内的天数
-            days = (end_date - start_date).days + 1
+            days_count = (end_date - start_date).days + 1
         else:
-            # 默认使用最近30天
-            end_date = datetime.now(timezone.utc).replace(tzinfo=None)
-            start_date = end_date - timedelta(days=days-1)
-        
-        # 使用原生SQL查询飞行任务趋势数据
-        sql = text("""
-            SELECT 
-                DATE(start_time) as date,
-                COUNT(id) as count,
-                SUM(TIMESTAMPDIFF(SECOND, start_time, end_time)) / 3600 as hours
-            FROM missions 
-            WHERE status = 'completed' 
-                AND start_time >= :start_date 
-                AND start_time <= :end_date 
-            GROUP BY DATE(start_time)
-            ORDER BY date
-        """)
-        
-        result = db.session.execute(sql, {
+            end_date = datetime.now().date()  # 结束日期是今天
+            start_date = end_date - timedelta(days=29)  # 开始日期是30天前
+            days_count = 30
+
+
+        sql_query = text("""
+                SELECT 
+                    DATE(start_time) as flight_date,
+                    COUNT(id) as mission_count,
+                    SUM(TIMESTAMPDIFF(SECOND, start_time, end_time)) / 3600 as flight_hours
+                FROM missions 
+                WHERE status = 'completed' 
+                  AND DATE(start_time) >= :start_date 
+                  AND DATE(start_time) <= :end_date 
+                GROUP BY DATE(start_time)
+                ORDER BY flight_date
+            """)
+
+
+
+        result = db.session.execute(sql_query, {
             'start_date': start_date,
             'end_date': end_date
         })
-        
-        
-        # 获取查询结果
-        rows = result.fetchall()
-        
-        # 构建完整的日期序列
-        trend = []
-        for i in range(days):
-            date = (start_date + timedelta(days=i)).date()
-            count = 0
-            hours = 0
-            for row in rows:
-                if row.date == date:
-                    count = row.count
-                    hours = row.hours if row.hours else 0
-                    break
-            trend.append({
-                'date': date.isoformat(),
-                'count': count,
-                'hours': round(hours, 2)
-            })
-        
-    
-        return trend
-        '''
+
+
+        database_rows = result.fetchall()
+
+
+        dates_list = []  # 存储日期
+        counts_list = []  # 存储任务数量
+        hours_list = []  # 存储飞行时长
+
+        # 将数据库结果按日期存储
+        database_data = {}
+        for row in database_rows:
+            date_str = row.flight_date.isoformat()
+            database_data[date_str] = {
+                'count': row.mission_count,
+                'hours': row.flight_hours if row.flight_hours else 0.0
+            }
+
+
+        # 循环处理每一天，填充三个列表
+        for day_index in range(days_count):
+            # 计算当前要处理的日期
+            current_date = start_date + timedelta(days=day_index)
+            date_str = current_date.strftime("%Y-%m-%d")  #注意格式！此时字典里的key是date字符串而不是datetime
+
+
+            if date_str in database_data:
+                # 如果有数据，使用数据库中的数据
+                day_data = database_data[date_str]
+                day_mission_count = day_data['count']
+                day_flight_hours = day_data['hours']
+            else:
+                # 如果没有数据，使用默认值
+                day_mission_count = 0
+                day_flight_hours = 0.0
+
+
+            dates_list.append(date_str)
+            counts_list.append(day_mission_count)
+            hours_list.append(round(day_flight_hours, 2))
+
+        data = {
+            'dates': dates_list,
+            'counts': counts_list,
+            'hours': hours_list
+        }
+
+        return data
+
+
 
     @staticmethod
     def get_airspace_usage_statistics(start_date=None, end_date=None):
@@ -138,6 +160,7 @@ class DashboardService:
     @staticmethod
     def get_alert_statistics(start_date=None, end_date=None):
         """获取告警统计"""
+        #因视频处理未完成，此功能暂未完善
         query = AlertEvent.query
 
         if start_date:
@@ -177,6 +200,7 @@ class DashboardService:
         for alert in alerts:
             status_stats[alert.status] += 1
 
+
         return {
             'total_alerts': total_alerts,
             'type_stats': type_stats,
@@ -184,11 +208,23 @@ class DashboardService:
             'status_stats': status_stats
         }
 
+
     @staticmethod
-    def get_alert_trend(days=7):
+    def get_alert_trend(days=None, start_date=None, end_date=None):
         """获取告警趋势（最近N天）"""
-        end_date = datetime.now(timezone.utc).replace(tzinfo=None)
-        start_date = end_date - timedelta(days=days)
+        # 如果提供了开始和结束日期，则使用它们而不是天数
+        if start_date and end_date:
+            # 计算天数
+            days = (end_date - start_date).days + 1
+        elif days:
+            #基于天数计算
+            end_date = datetime.now(timezone.utc).replace(tzinfo=None)
+            start_date = end_date - timedelta(days=days)
+        else:
+            # 默认显示最近30天
+            days = 30
+            end_date = datetime.now(timezone.utc).replace(tzinfo=None)
+            start_date = end_date - timedelta(days=days)
 
         # 按天分组统计
         results = db.session.query(
@@ -216,16 +252,91 @@ class DashboardService:
         return trend
 
     @staticmethod
+    def get_inspection_results(start_date=None, end_date=None):
+        """获取巡检成果统计"""
+
+        query = db.session.query(
+            AlertEvent.event_type,
+            func.count(AlertEvent.id).label('total_count')
+        )
+
+        if start_date:
+            query = query.filter(AlertEvent.occurred_time >= start_date)
+        if end_date:
+            query = query.filter(AlertEvent.occurred_time <= end_date)
+
+        # 按类型分组统计总数
+        type_results = query.group_by(AlertEvent.event_type).all()
+
+        # 按类型分组统计已解决的数量
+        resolved_results = query.filter(
+            AlertEvent.status == 'processing'  #或者是closed状态的告警
+        ).group_by(AlertEvent.event_type).all()
+
+        # 转换为字典便于查找
+        type_dict = {event_type: count for event_type, count in type_results}
+        resolved_dict = {event_type: count for event_type, count in resolved_results}
+
+        # 构建返回数据
+        categories = []
+        found = []
+        resolved = []
+
+        for event_type, count in type_results:
+            categories.append(event_type)
+            found.append(count)
+            resolved.append(resolved_dict.get(event_type, 0))
+
+        return {
+            'categories': categories,
+            'found': found,
+            'resolved': resolved
+        }
+
+    @staticmethod
+    def get_problem_sections(start_date=None, end_date=None):
+        """获取高频问题路段"""
+        # 查询告警事件中的路段统计数据
+        query = db.session.query(
+            AlertEvent.road_section,
+            func.count(AlertEvent.id).label('event_count')
+        )
+        
+
+        if start_date:
+            query = query.filter(AlertEvent.occurred_time >= start_date)
+        if end_date:
+            query = query.filter(AlertEvent.occurred_time <= end_date)
+            
+        # 按路段分组并统计事件数量
+        query = query.group_by(AlertEvent.road_section).order_by(func.count(AlertEvent.id).desc()) .limit(10)  # 获取前10个高频路段
+        
+        results = query.all()
+        
+        # 提取路段名称和事件数量
+        sections = [row.road_section for row in results]
+        counts = [row.event_count for row in results]
+        
+        return {
+            'sections': sections,
+            'counts': counts
+        }
+
+    @staticmethod
     def get_dashboard_overview(start_date=None, end_date=None):
         """获取看板总览"""
         flight_stats = DashboardService.get_flight_statistics(start_date, end_date)
         airspace_stats = DashboardService.get_airspace_usage_statistics(start_date, end_date)
         alert_stats = DashboardService.get_alert_statistics(start_date, end_date)
-        alert_trend = DashboardService.get_alert_trend()
+        alert_trend = DashboardService.get_alert_trend(start_date=start_date, end_date=end_date)
+        inspection_results = DashboardService.get_inspection_results(start_date, end_date)
+        problem_sections = DashboardService.get_problem_sections(start_date, end_date)
 
         return {
             'flight_statistics': flight_stats,
             'airspace_usage': airspace_stats,
             'alert_statistics': alert_stats,
-            'alert_trend': alert_trend
+            'alert_trend': alert_trend,
+            'inspection_results': inspection_results,
+            'problem_sections': problem_sections
         }

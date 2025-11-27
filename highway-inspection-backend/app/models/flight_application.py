@@ -48,7 +48,7 @@ class FlightApplication(db.Model):
 
     def is_expired(self):
         """判断是否过期"""
-        return self.status == 'pending' and datetime.utcnow() > self.planned_end_time
+        return self.status in ['pending','approved'] and datetime.utcnow() > self.planned_end_time
 
     def can_be_terminate(self):
         """判断是否可以终止,目前暂定只有误操作审批通过后需要终止"""

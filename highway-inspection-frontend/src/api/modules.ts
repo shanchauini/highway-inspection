@@ -260,5 +260,15 @@ export const dashboardApi = {
   // 获取飞行任务趋势
   getFlightTrend: (params?: any) => {
     return api.get('/dashboard/flight-trend', { params })
+  },
+  
+  // 获取巡检成果统计
+  getInspectionResults: (params?: any) => {
+    return api.get('/dashboard/inspection-results', { params })
+  },
+  
+  // 获取高频问题路段
+  getProblemSections: (params?: any) => {
+    return api.get('/dashboard/problem-sections', { params })
   }
 }

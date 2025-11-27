@@ -608,13 +608,15 @@ const loadDashboardData = async () => {
     })()
 
     // 加载统计数据 - 使用dashboardApi
-    const [statsRes, flightStatsRes, airspaceUsageRes, alertStatsRes, alertTrendRes, flightTrendRes] = await Promise.all([
+    const [statsRes, flightStatsRes, airspaceUsageRes, alertStatsRes, alertTrendRes, flightTrendRes, inspectionResultsRes, problemSectionsRes] = await Promise.all([
       dashboardApi.getStats(params),
       dashboardApi.getFlightStats(params),
       dashboardApi.getAirspaceUsage(params),
       dashboardApi.getAlertStats(params),
       dashboardApi.getAlertTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [] } })),
-      dashboardApi.getFlightTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [], hours: [] } }))
+      dashboardApi.getFlightTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [], hours: [] } })),
+      dashboardApi.getInspectionResults(params).catch(() => ({ code: 200, data: { categories: [], found: [], resolved: [] } })),
+      dashboardApi.getProblemSections(params).catch(() => ({ code: 200, data: { sections: [], counts: [] } }))
     ])
     
     // 飞行统计卡片
@@ -639,12 +641,11 @@ const loadDashboardData = async () => {
     }
 
     // 巡检成果
-    if (statsRes.code === 200 && statsRes.data) {
-      const inspectionData = statsRes.data.inspection_results || { categories: [], found: [], resolved: [] };
+    if (inspectionResultsRes.code === 200 && inspectionResultsRes.data) {
       inspectionResults.value = {
-        categories: inspectionData.categories || [],
-        found: inspectionData.found || [],
-        resolved: inspectionData.resolved || []
+        categories: inspectionResultsRes.data.categories || [],
+        found: inspectionResultsRes.data.found || [],
+        resolved: inspectionResultsRes.data.resolved || []
       }
     } else {
       // 使用模拟数据
@@ -656,11 +657,10 @@ const loadDashboardData = async () => {
     }
 
     // 高频问题路段
-    if (statsRes.code === 200 && statsRes.data) {
-      const problemData = statsRes.data.problem_sections || { sections: [], counts: [] };
+    if (problemSectionsRes.code === 200 && problemSectionsRes.data) {
       problemSections.value = {
-        sections: problemData.sections || [],
-        counts: problemData.counts || []
+        sections: problemSectionsRes.data.sections || [],
+        counts: problemSectionsRes.data.counts || []
       }
     } else {
       // 使用模拟数据
@@ -690,13 +690,28 @@ const loadDashboardData = async () => {
         collision: typeStats.collision || 0,
         weather: typeStats.weather || 0
       };
+    } else {
+      // 如果获取告警统计数据失败，尝试从store中获取统计数据
+      const stats = alertStore.getStatistics();
+      alertStats.value.total = stats.total;
+      
+      // 对于类型分布，我们需要从原始告警数据中统计
+      const alerts = alertStore.alerts;
+      alertStats.value.byType = {
+        traffic_accident: alerts.filter(a => a.event_type === 'traffic_accident').length,
+        road_anomaly: alerts.filter(a => a.event_type === 'road_anomaly').length,
+        facility_abnormal: alerts.filter(a => a.event_type === 'facility_abnormal').length,
+        intrusion: alerts.filter(a => a.event_type === 'intrusion').length,
+        collision: alerts.filter(a => a.event_type === 'collision').length,
+        weather: alerts.filter(a => a.event_type === 'weather').length
+      };
     }
 
     // 告警趋势
     if (alertTrendRes.code === 200 && alertTrendRes.data) {
-      const { dates, counts } = alertTrendRes.data
-      // 更新告警趋势数据
-      alertStats.value.trend = dates.map((d: string, i: number) => ({ date: d, count: counts[i] || 0 }))
+      // 后端返回的是数组格式 [{date: "2023-01-01", count: 5}, ...]
+      // 直接使用后端返回的数据
+      alertStats.value.trend = alertTrendRes.data
     }
   } catch (error) {
     console.error('加载看板数据失败:', error)

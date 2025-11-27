@@ -261,26 +261,15 @@ class FlightService:
         # 检查时间是否在申请范围内
         # 使用timezone-aware的UTC时间，确保正确性
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        print(f"[DEBUG] 放飞时间检查:")
-        print(f"  当前UTC时间: {now}")
-        print(f"  申请开始时间: {application.planned_start_time} (类型: {type(application.planned_start_time)})")
-        print(f"  申请结束时间: {application.planned_end_time} (类型: {type(application.planned_end_time)})")
-        print(f"  now < start: {now < application.planned_start_time}")
-        print(f"  now > end: {now > application.planned_end_time}")
+
         
         if now < application.planned_start_time or now > application.planned_end_time:
             error_msg = f'当前时间不在申请的飞行时间范围内 (当前UTC: {now}, 申请时间: {application.planned_start_time} ~ {application.planned_end_time})'
-            print(f"[ERROR] {error_msg}")
             raise ValueError(error_msg)
         
         # 验证预计结束时间
         estimated_finish_time = now + timedelta(minutes=application.total_time)
-        
-        print(f"[DEBUG] 预计结束时间检查:")
-        print(f"  飞行时长: {application.total_time}分钟")
-        print(f"  预计结束时间: {estimated_finish_time}")
-        print(f"  计划结束时间: {application.planned_end_time}")
-        
+
         if estimated_finish_time > application.planned_end_time:
             time_shortage = (estimated_finish_time - application.planned_end_time).total_seconds() / 60
             error_msg = (
@@ -288,7 +277,6 @@ class FlightService:
                 f'超出计划结束时间（{application.planned_end_time.strftime("%H:%M:%S")}）约{int(time_shortage)}分钟，'
                 f'无法在计划时间内完成飞行任务，不得放飞'
             )
-            print(f"[ERROR] {error_msg}")
             raise ValueError(error_msg)
 
         # 检查空域是否可用
@@ -313,11 +301,6 @@ class FlightService:
             status='executing'
         )
         db.session.add(mission)
-        
-        print(f"[DEBUG] 创建任务:")
-        print(f"  start_time: {now}")
-        print(f"  total_time: {application.total_time}分钟")
-        print(f"  estimated_end_time: {estimated_end_time}")
 
         # 更新空域状态
         airspace.status = 'occupied'
@@ -363,7 +346,7 @@ class FlightService:
         """检查并更新过期的申请"""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         expired_apps = FlightApplication.query.filter(
-            FlightApplication.status == 'pending',
+            FlightApplication.status.in_([ 'pending','approved']),
             FlightApplication.planned_end_time < now
         ).all()    #此处应该是超过计划结束时间，已修改
 
