@@ -104,7 +104,7 @@ class AirspaceService:
 
     @staticmethod
     def check_airspace_conflict(airspace_id, start_time, end_time, exclude_application_id=None):
-        """检查空域时间冲突"""
+        """检查空域时间冲突，只在时间段重叠时返回True"""
         query = AirspaceUsage.query.filter(
             AirspaceUsage.airspace_id == airspace_id,
             AirspaceUsage.status.in_(['approved', 'active']),
@@ -118,7 +118,9 @@ class AirspaceService:
         if exclude_application_id:
             query = query.filter(AirspaceUsage.flight_application_id != exclude_application_id)
 
-        return query.first() is not None
+        # 只有在时间段确实重叠时才返回冲突
+        conflict_record = query.first()
+        return conflict_record is not None
 
     @staticmethod
     def update_airspace_status(airspace_id, status):

@@ -7,14 +7,21 @@ class DashboardService:
     """数据看板服务"""
 
     @staticmethod
-    def get_flight_statistics(start_date=None, end_date=None):
+    def get_flight_statistics(start_date=None, end_date=None, user=None):
         """获取飞行统计"""
-        query = Mission.query.filter_by(status='completed')
+        # 修改查询条件，统计所有状态的任务
+        query = Mission.query
+
+        # 如果用户不是管理员，只显示该用户相关的任务
+        if user and not user.is_admin():
+            query = query.filter_by(operator_id=user.id)
 
         if start_date:
             query = query.filter(Mission.start_time >= start_date)
         if end_date:
-            query = query.filter(Mission.end_time <= end_date)
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            query = query.filter(Mission.end_time <= end_date_end)
 
         missions = query.all()
 
@@ -41,7 +48,7 @@ class DashboardService:
         }
 
     @staticmethod
-    def get_flight_trend(days=30, start_date=None, end_date=None):
+    def get_flight_trend(days=30, start_date=None, end_date=None, user=None):
         """获取飞行任务趋势"""
 
         if start_date and end_date:
@@ -51,8 +58,11 @@ class DashboardService:
             start_date = end_date - timedelta(days=29)  # 开始日期是30天前
             days_count = 30
 
-
-        sql_query = text("""
+        # 修复：结束日期应该包含当天的所有结果
+        end_date_end = datetime.combine(end_date, datetime.max.time())
+        
+        # 构造基础查询语句
+        base_sql = """
                 SELECT 
                     DATE(start_time) as flight_date,
                     COUNT(id) as mission_count,
@@ -61,20 +71,32 @@ class DashboardService:
                 WHERE status = 'completed' 
                   AND DATE(start_time) >= :start_date 
                   AND DATE(start_time) <= :end_date 
+        """
+        
+        # 如果用户不是管理员，添加用户过滤条件
+        if user and not user.is_admin():
+            base_sql += " AND operator_id = :operator_id "
+            
+        base_sql += """
                 GROUP BY DATE(start_time)
                 ORDER BY flight_date
-            """)
-
-
-
-        result = db.session.execute(sql_query, {
+            """
+        
+        sql_query = text(base_sql)
+        
+        # 准备参数
+        params = {
             'start_date': start_date,
-            'end_date': end_date
-        })
+            'end_date': end_date_end  # 使用修正后的结束日期
+        }
+        
+        # 如果用户不是管理员，添加用户ID参数
+        if user and not user.is_admin():
+            params['operator_id'] = user.id
 
+        result = db.session.execute(sql_query, params)
 
         database_rows = result.fetchall()
-
 
         dates_list = []  # 存储日期
         counts_list = []  # 存储任务数量
@@ -89,13 +111,11 @@ class DashboardService:
                 'hours': row.flight_hours if row.flight_hours else 0.0
             }
 
-
         # 循环处理每一天，填充三个列表
         for day_index in range(days_count):
             # 计算当前要处理的日期
             current_date = start_date + timedelta(days=day_index)
             date_str = current_date.strftime("%Y-%m-%d")  #注意格式！此时字典里的key是date字符串而不是datetime
-
 
             if date_str in database_data:
                 # 如果有数据，使用数据库中的数据
@@ -106,7 +126,6 @@ class DashboardService:
                 # 如果没有数据，使用默认值
                 day_mission_count = 0
                 day_flight_hours = 0.0
-
 
             dates_list.append(date_str)
             counts_list.append(day_mission_count)
@@ -120,17 +139,29 @@ class DashboardService:
 
         return data
 
-
-
     @staticmethod
-    def get_airspace_usage_statistics(start_date=None, end_date=None):
+    def get_airspace_usage_statistics(start_date=None, end_date=None, user=None):
         """获取空域使用统计"""
         query = AirspaceUsage.query.filter(AirspaceUsage.status.in_(['approved', 'active', 'released']))
+
+        # 如果用户不是管理员，只显示该用户相关的空域使用记录
+        if user and not user.is_admin():
+            # 获取用户任务相关的空域使用记录
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            if mission_ids:
+                query = query.filter(AirspaceUsage.flight_application_id.in_(
+                    db.session.query(Mission.flight_application_id).filter(Mission.id.in_(mission_ids))
+                ))
+            else:
+                # 用户没有任何任务，返回空结果
+                query = query.filter(AirspaceUsage.id.is_(None))  # 返回空结果
 
         if start_date:
             query = query.filter(AirspaceUsage.start_time >= start_date)
         if end_date:
-            query = query.filter(AirspaceUsage.end_time <= end_date)
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            query = query.filter(AirspaceUsage.end_time <= end_date_end)
 
         usage_records = query.all()
 
@@ -165,15 +196,22 @@ class DashboardService:
 
     #ai检测结果现存储在analysis_results表中，此功能暂不需用
     @staticmethod
-    def get_alert_statistics(start_date=None, end_date=None):
+    def get_alert_statistics(start_date=None, end_date=None, user=None):
         """获取告警统计"""
         #因视频处理未完成，此功能暂未完善
         query = AlertEvent.query
 
+        # 如果用户不是管理员，只显示该用户相关的告警
+        if user and not user.is_admin():
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            query = query.filter(AlertEvent.mission_id.in_(mission_ids))
+
         if start_date:
             query = query.filter(AlertEvent.occurred_time >= start_date)
         if end_date:
-            query = query.filter(AlertEvent.occurred_time <= end_date)
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            query = query.filter(AlertEvent.occurred_time <= end_date_end)
 
         alerts = query.all()
 
@@ -207,7 +245,6 @@ class DashboardService:
         for alert in alerts:
             status_stats[alert.status] += 1
 
-
         return {
             'total_alerts': total_alerts,
             'type_stats': type_stats,
@@ -215,9 +252,8 @@ class DashboardService:
             'status_stats': status_stats
         }
 
-
     @staticmethod
-    def get_alert_trend(days=None, start_date=None, end_date=None):
+    def get_alert_trend(days=None, start_date=None, end_date=None, user=None):
         """获取告警趋势（最近N天）"""
         # 如果提供了开始和结束日期，则使用它们而不是天数
         if start_date and end_date:
@@ -233,19 +269,36 @@ class DashboardService:
             end_date = datetime.now(timezone.utc).replace(tzinfo=None)
             start_date = end_date - timedelta(days=days)
 
-        # 按天分组统计
-        results = db.session.query(
+        # 修复：结束日期应该包含当天的所有结果
+        if hasattr(end_date, 'date'):
+            end_date_obj = end_date.date()
+        else:
+            end_date_obj = end_date
+            
+        end_date_end = datetime.combine(end_date_obj, datetime.max.time())
+
+        # 构建查询
+        query = db.session.query(
             func.date(AlertEvent.occurred_time).label('date'),
             func.count(AlertEvent.id).label('count')
-        ).filter(
+        )
+        
+        # 如果用户不是管理员，只显示该用户相关的告警
+        if user and not user.is_admin():
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            query = query.filter(AlertEvent.mission_id.in_(mission_ids))
+
+        query = query.filter(
             AlertEvent.occurred_time >= start_date,
-            AlertEvent.occurred_time <= end_date
-        ).group_by(func.date(AlertEvent.occurred_time)).all()
+            AlertEvent.occurred_time <= end_date_end
+        ).group_by(func.date(AlertEvent.occurred_time))
+
+        results = query.all()
 
         # 构建完整的日期序列
         trend = []
         for i in range(days):
-            date = (start_date + timedelta(days=i)).date()
+            date = (start_date + timedelta(days=i))
             count = 0
             for result in results:
                 if result.date == date:
@@ -259,7 +312,7 @@ class DashboardService:
         return trend
 
     @staticmethod
-    def get_inspection_results(start_date=None, end_date=None):
+    def get_inspection_results(start_date=None, end_date=None, user=None):
         """获取巡检成果统计（按类型分组）"""
 
         # 查询交通拥堵类型的结果
@@ -274,12 +327,20 @@ class DashboardService:
             func.count(AnalysisResult.id).label('total_count')
         ).filter(~AnalysisResult.target_type.contains('('))  # 道路破损类型不包含括号
 
+        # 如果用户不是管理员，只显示该用户相关的巡检结果
+        if user and not user.is_admin():
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            traffic_query = traffic_query.filter(AnalysisResult.mission_id.in_(mission_ids))
+            damage_query = damage_query.filter(AnalysisResult.mission_id.in_(mission_ids))
+
         if start_date:
             traffic_query = traffic_query.filter(AnalysisResult.occurred_time >= start_date)
             damage_query = damage_query.filter(AnalysisResult.occurred_time >= start_date)
         if end_date:
-            traffic_query = traffic_query.filter(AnalysisResult.occurred_time <= end_date)
-            damage_query = damage_query.filter(AnalysisResult.occurred_time <= end_date)
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            traffic_query = traffic_query.filter(AnalysisResult.occurred_time <= end_date_end)
+            damage_query = damage_query.filter(AnalysisResult.occurred_time <= end_date_end)
 
         # 按类型分组统计总数
         traffic_results = traffic_query.group_by(AnalysisResult.target_type).all()
@@ -306,14 +367,21 @@ class DashboardService:
         }
 
     @staticmethod
-    def get_inspection_results_statistics(start_date=None, end_date=None):
+    def get_inspection_results_statistics(start_date=None, end_date=None, user=None):
         """获取巡检结果统计"""
         query = AnalysisResult.query
+
+        # 如果用户不是管理员，只显示该用户相关的巡检结果
+        if user and not user.is_admin():
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            query = query.filter(AnalysisResult.mission_id.in_(mission_ids))
 
         if start_date:
             query = query.filter(AnalysisResult.occurred_time >= start_date)
         if end_date:
-            query = query.filter(AnalysisResult.occurred_time <= end_date)
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            query = query.filter(AnalysisResult.occurred_time <= end_date_end)
 
         results = query.all()
 
@@ -341,16 +409,19 @@ class DashboardService:
 
         for result in results:
             # 根据target_type判断事件类型
-            if '(' in result.target_type:
+            # 更准确地判断拥堵和破损类型
+            if result.target_type in congestion_stats:
                 traffic_congestion_count += 1
-                # 统计拥堵程度
-                if result.target_type in congestion_stats:
-                    congestion_stats[result.target_type] += 1
-            else:
+                congestion_stats[result.target_type] += 1
+            elif result.target_type in damage_stats:
                 road_damage_count += 1
-                # 统计破损程度
-                if result.target_type in damage_stats:
-                    damage_stats[result.target_type] += 1
+                damage_stats[result.target_type] += 1
+            elif '(' in result.target_type:
+                # 其他包含括号的类型归类为交通拥堵
+                traffic_congestion_count += 1
+            else:
+                # 其他类型归类为道路破损
+                road_damage_count += 1
 
         return {
             'total_results': total_results,
@@ -361,40 +432,48 @@ class DashboardService:
         }
 
     @staticmethod
-    def get_inspection_results_trend(start_date=None, end_date=None):
+    def get_inspection_results_trend(start_date=None, end_date=None, user=None):
         """获取巡检结果趋势"""
-        # 默认显示最近30天
-        if not start_date or not end_date:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=29)  # 30天包括今天
-            
-        days = (end_date - start_date).days + 1
-
-        # 按天分组统计
-        results = db.session.query(
+        # 修复：查询所有数据，然后根据时间过滤
+        query = db.session.query(
             func.date(AnalysisResult.occurred_time).label('date'),
             func.count(AnalysisResult.id).label('count')
-        ).filter(
-            AnalysisResult.occurred_time >= start_date,
-            AnalysisResult.occurred_time <= end_date
-        ).group_by(func.date(AnalysisResult.occurred_time)).all()
-
-        # 构建完整的日期序列
-        trend = []
-        result_dict = {result.date: result.count for result in results}
+        )
         
-        for i in range(days):
-            date = (start_date + timedelta(days=i)).date()
-            count = result_dict.get(date, 0)
-            trend.append({
-                'date': date.isoformat(),
-                'count': count
-            })
+        # 如果用户不是管理员，只显示该用户相关的巡检结果
+        if user and not user.is_admin():
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            query = query.filter(AnalysisResult.mission_id.in_(mission_ids))
+        
+        if start_date:
+            query = query.filter(AnalysisResult.occurred_time >= start_date)
+        if end_date:
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            query = query.filter(AnalysisResult.occurred_time <= end_date_end)
+            
+        results = query.group_by(func.date(AnalysisResult.occurred_time)).all()
 
-        return trend
+        # 如果提供了时间范围，则构建完整的日期序列
+        if start_date and end_date:
+            days = (end_date - start_date).days + 1
+            trend = []
+            result_dict = {result.date: result.count for result in results}
+            
+            for i in range(days):
+                date = (start_date + timedelta(days=i))
+                count = result_dict.get(date, 0)
+                trend.append({
+                    'date': date.isoformat(),
+                    'count': count
+                })
+            return trend
+        else:
+            # 如果没有提供时间范围，直接返回查询结果
+            return [{'date': r.date.isoformat(), 'count': r.count} for r in results]
 
     @staticmethod
-    def get_problem_sections(start_date=None, end_date=None):
+    def get_problem_sections(start_date=None, end_date=None, user=None):
         """获取高频问题路段统计"""
         # 按路段分组并统计数量
         query = db.session.query(
@@ -404,10 +483,17 @@ class DashboardService:
             AnalysisResult, Video.id == AnalysisResult.video_id
         )
         
+        # 如果用户不是管理员，只显示该用户相关的巡检结果
+        if user and not user.is_admin():
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            query = query.filter(AnalysisResult.mission_id.in_(mission_ids))
+        
         if start_date:
             query = query.filter(AnalysisResult.occurred_time >= start_date)
         if end_date:
-            query = query.filter(AnalysisResult.occurred_time <= end_date)
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            query = query.filter(AnalysisResult.occurred_time <= end_date_end)
             
         query = query.group_by(Video.road_section).order_by(func.count(AnalysisResult.id).desc()).limit(10)
         
@@ -423,14 +509,21 @@ class DashboardService:
         }
 
     @staticmethod
-    def get_inspection_type_distribution(start_date=None, end_date=None):
+    def get_inspection_type_distribution(start_date=None, end_date=None, user=None):
         """获取巡检结果类型分布"""
         query = AnalysisResult.query
+
+        # 如果用户不是管理员，只显示该用户相关的巡检结果
+        if user and not user.is_admin():
+            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
+            query = query.filter(AnalysisResult.mission_id.in_(mission_ids))
 
         if start_date:
             query = query.filter(AnalysisResult.occurred_time >= start_date)
         if end_date:
-            query = query.filter(AnalysisResult.occurred_time <= end_date)
+            # 修复：结束日期应该包含当天的所有结果
+            end_date_end = datetime.combine(end_date, datetime.max.time())
+            query = query.filter(AnalysisResult.occurred_time <= end_date_end)
 
         results = query.all()
 
@@ -451,14 +544,18 @@ class DashboardService:
 
         for result in results:
             # 根据target_type判断事件类型并统计
-            if '(' in result.target_type:
-                # 交通拥堵类型
-                if result.target_type in congestion_stats:
-                    congestion_stats[result.target_type] += 1
+            if result.target_type in congestion_stats:
+                congestion_stats[result.target_type] += 1
+            elif result.target_type in damage_stats:
+                damage_stats[result.target_type] += 1
+            elif '(' in result.target_type:
+                # 其他包含括号的类型归类为交通拥堵
+                # 不增加具体统计，但计入总数
+                pass
             else:
-                # 道路破损类型
-                if result.target_type in damage_stats:
-                    damage_stats[result.target_type] += 1
+                # 其他类型归类为道路破损
+                # 不增加具体统计，但计入总数
+                pass
 
         # 合并统计数据
         type_distribution = {}
@@ -475,15 +572,15 @@ class DashboardService:
         return type_distribution
 
     @staticmethod
-    def get_dashboard_overview(start_date=None, end_date=None):
+    def get_dashboard_overview(start_date=None, end_date=None, user=None):
         """获取看板总览"""
-        flight_stats = DashboardService.get_flight_statistics(start_date, end_date)
-        airspace_stats = DashboardService.get_airspace_usage_statistics(start_date, end_date)
+        flight_stats = DashboardService.get_flight_statistics(start_date, end_date, user)
+        airspace_stats = DashboardService.get_airspace_usage_statistics(start_date, end_date, user)
         # 使用新的巡检结果统计替代告警统计
-        inspection_stats = DashboardService.get_inspection_results_statistics(start_date, end_date)
-        inspection_trend = DashboardService.get_inspection_results_trend(start_date=start_date, end_date=end_date)
-        inspection_results = DashboardService.get_inspection_results(start_date, end_date)
-        problem_sections = DashboardService.get_problem_sections(start_date, end_date)
+        inspection_stats = DashboardService.get_inspection_results_statistics(start_date, end_date, user)
+        inspection_trend = DashboardService.get_inspection_results_trend(start_date=start_date, end_date=end_date, user=user)
+        inspection_results = DashboardService.get_inspection_results(start_date, end_date, user)
+        problem_sections = DashboardService.get_problem_sections(start_date, end_date, user)
 
         return {
             'flight_statistics': flight_stats,

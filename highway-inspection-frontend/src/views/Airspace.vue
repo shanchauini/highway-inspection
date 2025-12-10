@@ -483,6 +483,14 @@ const editAirspace = (airspace: Airspace) => {
   let coordinates: Array<[number, number]> = []
   if (airspace.area && airspace.area.coordinates && airspace.area.coordinates[0]) {
     coordinates = airspace.area.coordinates[0].map((coord: number[]) => [coord[1], coord[0]] as [number, number])
+    // 移除末尾重复的坐标点（GeoJSON多边形要求首尾点相同）
+    if (coordinates.length > 1) {
+      const first = coordinates[0]
+      const last = coordinates[coordinates.length - 1]
+      if (first[0] === last[0] && first[1] === last[1]) {
+        coordinates.pop()
+      }
+    }
   }
   
   airspaceForm.value = {

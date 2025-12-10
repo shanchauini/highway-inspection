@@ -252,7 +252,8 @@ def upload_media_file():
                         video_id=video.id,
                         target_type=result['class_name'],
                         occurred_time=datetime.now(),
-                        confidence=result['confidence']
+                        confidence=result['confidence'],
+                        result_image=file_path  # 保存原始图片路径
                     )
                     
                     db.session.add(analysis_result)

@@ -160,10 +160,11 @@
             <el-option 
               v-for="airspace in availableAirspaces" 
               :key="airspace.id" 
-              :label="`${airspace.name} (${airspace.number})`" 
+              :label="`${airspace.name} (${airspace.number}) ${airspace.status === 'occupied' ? '(占用中)' : ''}`" 
               :value="airspace.id"
             />
           </el-select>
+          <div class="form-tip">提示：占用中的空域也可以申请，系统会自动检查时间是否冲突</div>
         </el-form-item>
 
         <el-row :gutter="20">
@@ -267,8 +268,8 @@
         <el-form :model="approvalForm" ref="approvalFormRef" label-width="100px">
           <el-form-item label="审批结果" prop="decision">
             <el-radio-group v-model="approvalForm.decision">
-              <el-radio value="approved">批准</el-radio>
-              <el-radio value="rejected">驳回</el-radio>
+              <el-radio :value="'approved'">批准</el-radio>
+              <el-radio :value="'rejected'">驳回</el-radio>
             </el-radio-group>
           </el-form-item>
           <el-form-item label="审批意见" prop="reason">
@@ -396,8 +397,8 @@ watch([
   }
 })
 
-// 计算属性 - 从airspace store获取可用空域
-const availableAirspaces = computed(() => airspaceStore.airspaces.filter(a => a.status === 'available'))
+// 计算属性 - 从airspace store获取适飞区空域（包括占用中的空域）
+const availableAirspaces = computed(() => airspaceStore.airspaces.filter(a => a.type === 'suitable'))
 
 const filteredApplications = computed(() => {
   let apps = flightStore.applications
@@ -525,103 +526,117 @@ const resetApplicationForm = () => {
 }
 
 const saveAsDraft = async () => {
-  try {
-    // 验证必填字段
-    if (!applicationForm.value.planned_start_time || !applicationForm.value.planned_end_time) {
-      ElMessage.warning('请选择开始时间和结束时间')
-      return
-    }
-    
-    // 生成随机航线
-    const airspace = availableAirspaces.value.find(a => a.id === Number(applicationForm.value.planned_airspace_id))
-    let route = applicationForm.value.route
-    
-    // 总是生成新的随机航线，而不是使用已有的
-    if (airspace?.area?.coordinates) {
-      route = generateRandomRoute(airspace.area.coordinates)
-    } else {
-      // 如果没有空域数据，使用默认航线
-      route = { type: 'LineString', coordinates: [[116.4, 39.9], [116.41, 39.91], [116.42, 39.92]] }
-    }
-    
-    const appData: any = {
-      drone_model: applicationForm.value.drone_model,
-      task_purpose: applicationForm.value.task_purpose,
-      planned_airspace_id: Number(applicationForm.value.planned_airspace_id),
-      planned_start_time: dayjs(applicationForm.value.planned_start_time).utc().format(),
-      planned_end_time: dayjs(applicationForm.value.planned_end_time).utc().format(),
-      total_time: applicationForm.value.total_time, // 直接使用表单填写的时长
-      route: route,
-      is_long_term: false // 默认短期申请
-    }
+  if (!applicationFormRef.value) return
+  
+  await applicationFormRef.value.validate(async (valid: boolean) => {
+    if (valid) {
+      try {
+        // 验证必填字段
+        if (!applicationForm.value.planned_start_time || !applicationForm.value.planned_end_time) {
+          ElMessage.warning('请选择开始时间和结束时间')
+          return
+        }
+        
+        // 生成随机航线
+        const selectedAirspaceId = Number(applicationForm.value.planned_airspace_id)
+        const airspace = airspaceStore.airspaces.find(a => a.id === selectedAirspaceId)
+        let route = applicationForm.value.route
+        
+        // 总是生成新的随机航线，而不是使用已有的
+        if (airspace?.area?.coordinates) {
+          route = generateRandomRoute(airspace.area.coordinates)
+        } else {
+          // 如果没有空域数据，使用默认航线
+          route = { type: 'LineString', coordinates: [[116.4, 39.9], [116.41, 39.91], [116.42, 39.92]] }
+        }
+        
+        const appData: any = {
+          drone_model: applicationForm.value.drone_model,
+          task_purpose: applicationForm.value.task_purpose,
+          planned_airspace_id: Number(applicationForm.value.planned_airspace_id),
+          planned_start_time: dayjs(applicationForm.value.planned_start_time).utc().format(),
+          planned_end_time: dayjs(applicationForm.value.planned_end_time).utc().format(),
+          total_time: applicationForm.value.total_time, // 直接使用表单填写的时长
+          route: route,
+          is_long_term: false // 默认短期申请
+        }
 
-    if (editingApplication.value) {
-      await flightStore.updateFlight(editingApplication.value.id, appData)
-      ElMessage.success('草稿已更新')
-    } else {
-      await flightStore.createFlight(appData)
-      ElMessage.success('草稿已保存')
+        if (editingApplication.value) {
+          await flightStore.updateFlight(editingApplication.value.id, appData)
+          ElMessage.success('草稿已更新')
+        } else {
+          await flightStore.createFlight(appData)
+          ElMessage.success('草稿已保存')
+        }
+        
+        createDialogVisible.value = false
+        await flightStore.fetchFlights(currentPage.value, pageSize.value)
+      } catch (error) {
+        // 错误已在store中处理
+        console.error('保存失败:', error)
+      }
     }
-    
-    createDialogVisible.value = false
-    await flightStore.fetchFlights(currentPage.value, pageSize.value)
-  } catch (error) {
-    // 错误已在store中处理
-    console.error('保存失败:', error)
-  }
+  })
 }
 
 const submitApplication = async () => {
-  try {
-    // 验证表单
-    if (!applicationForm.value.planned_start_time || !applicationForm.value.planned_end_time) {
-      ElMessage.warning('请选择开始时间和结束时间')
-      return
-    }
-    
-    // 生成随机航线
-    const airspace = availableAirspaces.value.find(a => a.id === Number(applicationForm.value.planned_airspace_id))
-    let route = applicationForm.value.route
-    
-    // 总是生成新的随机航线，而不是使用已有的
-    if (airspace?.area?.coordinates) {
-      route = generateRandomRoute(airspace.area.coordinates)
-    } else {
-      // 如果没有空域数据，使用默认航线
-      route = { type: 'LineString', coordinates: [[116.4, 39.9], [116.41, 39.91], [116.42, 39.92]] }
-    }
-    
-    const appData: any = {
-      drone_model: applicationForm.value.drone_model,
-      task_purpose: applicationForm.value.task_purpose,
-      planned_airspace_id: Number(applicationForm.value.planned_airspace_id),
-      planned_start_time: dayjs(applicationForm.value.planned_start_time as string).utc().format(),
-      planned_end_time: dayjs(applicationForm.value.planned_end_time as string).utc().format(),
-      total_time: applicationForm.value.total_time, // 直接使用表单填写的时长
-      route: route,
-      is_long_term: false // 默认短期申请
-    }
+  if (!applicationFormRef.value) return
+  
+  await applicationFormRef.value.validate(async (valid: boolean) => {
+    if (valid) {
+      try {
+        // 验证必填字段
+        if (!applicationForm.value.planned_start_time || !applicationForm.value.planned_end_time) {
+          ElMessage.warning('请选择开始时间和结束时间')
+          return
+        }
+        
+        // 生成随机航线
+        const selectedAirspaceId = Number(applicationForm.value.planned_airspace_id)
+        const airspace = airspaceStore.airspaces.find(a => a.id === selectedAirspaceId)
+        let route = applicationForm.value.route
+        
+        // 总是生成新的随机航线，而不是使用已有的
+        if (airspace?.area?.coordinates) {
+          route = generateRandomRoute(airspace.area.coordinates)
+        } else {
+          // 如果没有空域数据，使用默认航线
+          route = { type: 'LineString', coordinates: [[116.4, 39.9], [116.41, 39.91], [116.42, 39.92]] }
+        }
+        
+        const appData: any = {
+          drone_model: applicationForm.value.drone_model,
+          task_purpose: applicationForm.value.task_purpose,
+          planned_airspace_id: Number(applicationForm.value.planned_airspace_id),
+          planned_start_time: dayjs(applicationForm.value.planned_start_time as string).utc().format(),
+          planned_end_time: dayjs(applicationForm.value.planned_end_time as string).utc().format(),
+          total_time: applicationForm.value.total_time, // 直接使用表单填写的时长
+          route: route,
+          is_long_term: false // 默认短期申请
+        }
 
-    if (editingApplication.value) {
-      // 如果是编辑状态，先更新再提交
-      await flightStore.updateFlight(editingApplication.value.id, appData)
-      await flightStore.submitFlight(editingApplication.value.id)
-      ElMessage.success('申请已提交')
-    } else {
-      // 如果是新建，直接创建并提交（不保存草稿）
-      const newApp = await flightStore.createFlight(appData)
-      if (newApp) {
-        await flightStore.submitFlight(newApp.id)
-        ElMessage.success('申请已提交')
+        if (editingApplication.value) {
+          // 如果是编辑状态，先更新再提交
+          await flightStore.updateFlight(editingApplication.value.id, appData)
+          await flightStore.submitFlight(editingApplication.value.id)
+          ElMessage.success('申请已提交')
+        } else {
+          // 如果是新建，直接创建并提交（不保存草稿）
+          const newApp = await flightStore.createFlight(appData)
+          if (newApp) {
+            await flightStore.submitFlight(newApp.id)
+            ElMessage.success('申请已提交')
+          }
+        }
+        
+        createDialogVisible.value = false
+        await flightStore.fetchFlights(currentPage.value, pageSize.value)
+      } catch (error) {
+        // 错误已在store中处理
+        console.error('提交失败:', error)
       }
     }
-    
-    createDialogVisible.value = false
-    await flightStore.fetchFlights(currentPage.value, pageSize.value)
-  } catch (error) {
-    // 错误已在store中处理
-    console.error('提交失败:', error)
-  }
+  })
 }
 
 const approveApplication = (app: FlightApplication) => {
@@ -914,6 +929,12 @@ const terminateApplication = async (app: FlightApplication) => {
   color: #303133;
 }
 
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+}
+
 :deep(.el-table) {
   border-radius: 8px;
 }
@@ -930,4 +951,3 @@ const terminateApplication = async (app: FlightApplication) => {
   font-weight: 500;
 }
 </style>
-
