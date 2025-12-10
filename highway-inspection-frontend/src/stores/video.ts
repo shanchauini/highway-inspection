@@ -115,6 +115,31 @@ export const useVideoStore = defineStore('video', () => {
     }
   }
 
+  // 上传媒体文件（图片或视频）
+  const uploadMediaFile = async (formData: FormData) => {
+    loading.value = true
+    try {
+      const response = await videoApi.uploadMediaFile(formData) as ApiResponse<Video>
+      
+      if (response.code === 200 || response.code === 201) {
+        if (response.data) {
+          ElMessage.success('文件上传成功')
+          await fetchVideos(currentPage.value, pageSize.value)
+          return response.data
+        }
+      } else {
+        throw new Error(response.message || '文件上传失败')
+      }
+    } catch (error: any) {
+      console.error('文件上传失败:', error)
+      const errorMsg = error.response?.data?.message || error.message || '文件上传失败'
+      ElMessage.error(errorMsg)
+      throw error
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     videos,
     loading,
@@ -124,7 +149,8 @@ export const useVideoStore = defineStore('video', () => {
     initData,
     fetchVideos,
     createVideo,
-    fetchAnalysisResults
+    fetchAnalysisResults,
+    uploadMediaFile
   }
 })
 

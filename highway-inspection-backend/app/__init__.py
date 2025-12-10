@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
@@ -49,6 +49,14 @@ def create_app(config_name=None):
             'version': '1.0.0',
             'status': 'running'
         }
+
+    # 静态文件路由 - 访问上传的文件
+    @app.route('/uploads/<path:filename>')
+    def serve_uploads(filename):
+        """提供上传文件的访问"""
+        # 使用 uploads 根目录，支持所有子目录
+        uploads_base = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+        return send_from_directory(uploads_base, filename)
 
     return app
 

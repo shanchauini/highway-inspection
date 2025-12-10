@@ -40,6 +40,15 @@ export const videoApi = {
     return api.post('/videos', data)
   },
 
+  // 上传媒体文件（图片或视频）
+  uploadMediaFile: (formData: FormData) => {
+    return api.post('/videos/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  },
+
   // 获取视频分析结果
   getAnalysisResults: (id: string | number) => {
     return api.get(`/videos/${id}/analysis-results`)
@@ -207,6 +216,29 @@ export const alertApi = {
   }
 }
 
+// 巡检结果API
+export const inspectionResultApi = {
+  // 获取巡检结果列表
+  getInspectionResults: (params?: any) => {
+    return api.get('/inspection-results', { params })
+  },
+
+  // 获取巡检结果详情
+  getInspectionResultById: (id: string | number) => {
+    return api.get(`/inspection-results/${id}`)
+  },
+
+  // 获取巡检结果统计
+  getInspectionStatistics: (params?: any) => {
+    return api.get('/inspection-results/statistics', { params })
+  },
+
+  // 获取巡检结果趋势
+  getInspectionTrend: (params?: any) => {
+    return api.get('/inspection-results/trend', { params })
+  }
+}
+
 // 任务API
 export const missionApi = {
   // 获取任务列表
@@ -267,8 +299,50 @@ export const dashboardApi = {
     return api.get('/dashboard/inspection-results', { params })
   },
   
+  // 获取巡检结果趋势
+  getInspectionTrend: (params?: any) => {
+    return api.get('/dashboard/inspection-trend', { params })
+  },
+  
+  // 获取巡检结果类型分布
+  getInspectionTypeDistribution: (params?: any) => {
+    return api.get('/dashboard/inspection-type-distribution', { params })
+  },
+  
   // 获取高频问题路段
   getProblemSections: (params?: any) => {
     return api.get('/dashboard/problem-sections', { params })
+  }
+}
+
+// AI 相关API
+export const aiApi = {
+  // AI 健康检查
+  healthCheck: () => {
+    return api.get('/ai/health')
+  },
+
+  // 提交单个分析结果
+  submitAnalysisResult: (data: {
+    mission_id: number
+    video_id: number
+    target_type: string
+    occurred_time: string
+    bounding_box?: any
+    confidence?: number
+  }) => {
+    return api.post('/ai/analysis/results', data)
+  },
+
+  // 批量提交分析结果
+  submitAnalysisResultsBatch: (results: Array<{
+    mission_id: number
+    video_id: number
+    target_type: string
+    occurred_time: string
+    bounding_box?: any
+    confidence?: number
+  }>) => {
+    return api.post('/ai/analysis/results/batch', { results })
   }
 }

@@ -44,10 +44,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '空域管理', icon: 'Location' }
       },
       {
-        path: '/alerts',
-        name: 'Alerts',
-        component: () => import('@/views/Alerts.vue'),
-        meta: { title: '告警中心', icon: 'Warning' }
+        path: '/inspection-results',
+        name: 'InspectionResults',
+        component: () => import('@/views/InspectionResults.vue'),
+        meta: { title: '巡检结果', icon: 'Warning' }
       },
       {
         path: '/mission-history',

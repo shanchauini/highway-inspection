@@ -40,10 +40,14 @@ class Config:
     # 文件上传配置
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads/videos')
     MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 2 * 1024 * 1024 * 1024))  # 2GB
-    ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
+    ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'jpg', 'png'}
     
     # 分页配置
     PAGE_SIZE = 20
+    
+    # AI 模型配置
+    AI_MODEL_PATH = os.getenv('AI_MODEL_PATH', None)  # None 表示使用默认路径
+    AI_ENABLED = os.getenv('AI_ENABLED', 'true').lower() == 'true'
 
 
 class DevelopmentConfig(Config):

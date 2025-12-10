@@ -109,7 +109,8 @@ class Mission(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'route_distance': round(self.calculate_route_distance(), 2),  # 航线距离（公里）
-            'flight_speed': self.calculate_flight_speed()  # 飞行速度（公里/小时）
+            'flight_speed': self.calculate_flight_speed(),  # 飞行速度（公里/小时）
+            'analysis_results_count': self.analysis_results.count()  # AI分析结果数量
         }
 
         if include_relations:

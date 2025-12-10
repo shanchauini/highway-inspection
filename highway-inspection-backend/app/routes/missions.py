@@ -72,8 +72,8 @@ def get_active_missions():
         from datetime import datetime, timezone
         from app.models import db, Airspace
         
-        user_id = get_jwt_identity()
-        user = User.query.get(int(user_id))
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
 
         query = Mission.query.filter_by(status='executing')
 

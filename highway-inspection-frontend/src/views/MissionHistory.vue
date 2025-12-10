@@ -69,7 +69,7 @@
           <div class="info-row"><span class="label">总飞行里程：</span><span class="val">{{ current?.route_distance ? current.route_distance.toFixed(2) + ' 公里' : '-' }}</span></div>
           <el-divider />
           <div class="info-row"><span class="label">视频数量：</span><span class="val">{{ videos.length }}</span></div>
-          <div class="info-row"><span class="label">告警数量：</span><span class="val">{{ alerts.length }}</span></div>
+          <div class="info-row"><span class="label">识别结果数量：</span><span class="val">{{ current?.analysis_results_count || 0 }}</span></div>
         </div>
       </div>
       <template #footer>
@@ -114,7 +114,6 @@ const detailVisible = ref(false)
 const current = ref<Mission | null>(null)
 const videos = ref<any[]>([])
 const alerts = ref<any[]>([])
-
 let map: L.Map | null = null
 let routeLayer: L.Polyline<any> | null = null
 

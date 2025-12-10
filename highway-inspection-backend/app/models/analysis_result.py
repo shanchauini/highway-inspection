@@ -14,6 +14,7 @@ class AnalysisResult(db.Model):
     occurred_time = db.Column(db.DateTime, nullable=False)
     bounding_box = db.Column(db.JSON)  # 目标框坐标
     confidence = db.Column(db.Numeric(4, 3))  # 置信度
+    result_image = db.Column(db.String(500))  # 检测结果图片路径
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # 索引
@@ -37,6 +38,7 @@ class AnalysisResult(db.Model):
             'occurred_time': self.occurred_time.isoformat() if self.occurred_time else None,
             'bounding_box': self.get_bounding_box(),
             'confidence': float(self.confidence) if self.confidence else None,
+            'result_image': self.result_image,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

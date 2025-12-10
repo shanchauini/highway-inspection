@@ -57,8 +57,8 @@
         <div class="card-content">
           <el-icon class="card-icon"><Warning /></el-icon>
           <div class="card-info">
-            <div class="cosmic-stat-value">{{ alertStats.total }}</div>
-            <div class="cosmic-stat-label">告警事件总数</div>
+            <div class="cosmic-stat-value">{{ inspectionStats.totalResults }}</div>
+            <div class="cosmic-stat-label">巡检结果总数</div>
           </div>
         </div>
       </el-card>
@@ -82,31 +82,23 @@
         <v-chart class="chart" :option="airspaceUtilizationOption" autoresize />
       </el-card>
 
-      <!-- 告警类型分布 -->
+      <!-- 巡检结果类型分布 -->
       <el-card shadow="never" class="chart-card cosmic-card">
         <template #header>
-          <span class="cosmic-title-small">告警类型分布</span>
+          <span class="cosmic-title-small">巡检结果类型分布</span>
         </template>
-        <v-chart class="chart" :option="alertTypeOption" autoresize />
+        <v-chart class="chart" :option="inspectionTypeDistributionOption" autoresize />
       </el-card>
 
-      <!-- 告警趋势 -->
+      <!-- 巡检结果趋势 -->
       <el-card shadow="never" class="chart-card cosmic-card">
         <template #header>
-          <span class="cosmic-title-small">告警趋势</span>
+          <span class="cosmic-title-small">巡检结果趋势</span>
         </template>
-        <v-chart class="chart" :option="alertTrendOption" autoresize />
+        <v-chart class="chart" :option="inspectionTrendOption" autoresize />
       </el-card>
 
-      <!-- 巡检成果统计 -->
-      <el-card shadow="never" class="chart-card large cosmic-card">
-        <template #header>
-          <span class="cosmic-title-small">公路巡检成果统计</span>
-        </template>
-        <v-chart class="chart" :option="inspectionResultsOption" autoresize />
-      </el-card>
-
-      <!-- 高频问题路段 -->
+      <!-- 高频问题类型 -->
       <el-card shadow="never" class="chart-card large cosmic-card">
         <template #header>
           <span class="cosmic-title-small">高频问题路段 TOP10</span>
@@ -136,7 +128,6 @@ import {
   DatasetComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { useAlertStore } from '@/stores/alert'
 import { useAirspaceStore } from '@/stores/airspace'
 import { dashboardApi } from '@/api/modules'
 
@@ -152,7 +143,6 @@ use([
   DatasetComponent
 ])
 
-const alertStore = useAlertStore()
 const airspaceStore = useAirspaceStore()
 
 // 响应式数据
@@ -168,45 +158,41 @@ const flightStats = ref({
   totalDistance: 0
 })
 
-// 告警统计数据
-const alertStats = ref({
-  total: 0,
-  byType: {
-    traffic_accident: 0,
-    road_anomaly: 0,
-    facility_abnormal: 0,
-    intrusion: 0,
-    collision: 0,
-    weather: 0
+// 巡检结果统计数据
+const inspectionStats = ref({
+  totalResults: 0,
+  trafficCongestion: {
+    total: 0,
+    light: 0,
+    medium: 0,
+    heavy: 0
+  },
+  roadDamage: {
+    total: 0,
+    none: 0,
+    light: 0,
+    medium: 0,
+    severe: 0
   },
   trend: [] as { date: string; count: number }[]
 })
 
-// 计算属性
-const alertStatsComputed = computed(() => {
-  const stats = alertStore.getStatistics()
-  // 根据日期范围过滤
-  let filteredAlerts = alertStore.alerts
-  if (dateRange.value) {
-    const [start, end] = dateRange.value
-    filteredAlerts = filteredAlerts.filter(a => {
-      const date = a.created_at?.split('T')[0] || ''
-      return date >= start && date <= end
-    })
-  }
-  
-  return {
-    total: filteredAlerts.length,
-    byType: {
-      traffic_accident: filteredAlerts.filter(a => a.event_type === 'traffic_accident').length,
-      road_anomaly: filteredAlerts.filter(a => a.event_type === 'road_anomaly').length,
-      facility_abnormal: filteredAlerts.filter(a => a.event_type === 'facility_abnormal').length,
-      intrusion: filteredAlerts.filter(a => a.event_type === 'intrusion').length,
-      collision: filteredAlerts.filter(a => a.event_type === 'collision').length,
-      weather: filteredAlerts.filter(a => a.event_type === 'weather').length
-    },
-    trend: []
-  }
+// 新增缺失的响应式变量
+const flightTrend = ref({
+  dates: [],
+  counts: [],
+  hours: []
+})
+
+const airspaceUsage = ref({
+  available: 0,
+  occupied: 0,
+  unavailable: 0
+})
+
+const problemSections = ref({
+  sections: [],
+  counts: []
 })
 
 // 飞行趋势图表配置
@@ -327,35 +313,32 @@ const airspaceUtilizationOption = computed(() => {
   }
 })
 
-// 告警类型分布图表配置
-const alertTypeOption = computed(() => {
-  // 使用响应式数据而不是计算属性
-  const stats = alertStats.value
-  
-  const alertTypeData = [
-    { value: stats.byType.traffic_accident, name: '交通事故', itemStyle: { color: '#F56C6C' } },
-    { value: stats.byType.road_anomaly, name: '路况异常', itemStyle: { color: '#E6A23C' } },
-    { value: stats.byType.facility_abnormal, name: '设施异常', itemStyle: { color: '#409EFF' } },
-    { value: stats.byType.intrusion, name: '空域侵入', itemStyle: { color: '#909399' } },
-    { value: stats.byType.collision, name: '碰撞风险', itemStyle: { color: '#F56C6C' } },
-    { value: stats.byType.weather, name: '气象预警', itemStyle: { color: '#67C23A' } }
-  ]
-  
+// 巡检结果类型分布图表配置
+const inspectionTypeDistributionOption = computed(() => {
+  // 准备巡检结果类型分布数据
+  const typeData = [
+    { value: inspectionStats.value.trafficCongestion.light, name: '交通拥堵-轻度' },
+    { value: inspectionStats.value.trafficCongestion.medium, name: '交通拥堵-中度' },
+    { value: inspectionStats.value.trafficCongestion.heavy, name: '交通拥堵-重度' },
+    { value: inspectionStats.value.roadDamage.none, name: '道路破损-无破损' },
+    { value: inspectionStats.value.roadDamage.light, name: '道路破损-轻度' },
+    { value: inspectionStats.value.roadDamage.medium, name: '道路破损-中度' },
+    { value: inspectionStats.value.roadDamage.severe, name: '道路破损-严重' }
+  ].filter(item => item.value > 0) // 只显示有数据的项
+
   return {
     tooltip: {
-      trigger: 'item',
-      formatter: '{a} <br/>{b}: {c} ({d}%)'
+      trigger: 'item'
     },
     legend: {
-      orient: 'horizontal',
-      bottom: 'bottom',
+      top: 'top',
       textStyle: {
         color: '#fff'
       }
     },
     series: [
       {
-        name: '告警类型',
+        name: '巡检结果类型',
         type: 'pie',
         radius: ['40%', '70%'],
         avoidLabelOverlap: false,
@@ -378,23 +361,23 @@ const alertTypeOption = computed(() => {
         labelLine: {
           show: false
         },
-        data: alertTypeData
+        data: typeData
       }
     ]
   }
 })
 
-// 告警趋势图表配置
-const alertTrendOption = computed(() => {
-  // 使用响应式数据而不是计算属性
-  const trendData = alertStats.value.trend
+// 巡检结果趋势图表配置
+const inspectionTrendOption = computed(() => {
+  // 使用巡检结果趋势数据
+  const trendData = inspectionStats.value.trend
   
   return {
     tooltip: {
       trigger: 'axis'
     },
     legend: {
-      data: ['告警数量'],
+      data: ['巡检结果数量'],
       textStyle: {
         color: '#fff'
       }
@@ -430,7 +413,7 @@ const alertTrendOption = computed(() => {
     },
     series: [
       {
-        name: '告警数量',
+        name: '巡检结果数量',
         type: 'line',
         data: trendData.map(t => t.count),
         areaStyle: {
@@ -447,7 +430,7 @@ const alertTrendOption = computed(() => {
           }
         },
         itemStyle: {
-          color: '#F56C6C'
+          color: '#409EFF'
         },
         smooth: true
       }
@@ -455,75 +438,7 @@ const alertTrendOption = computed(() => {
   }
 })
 
-// 巡检成果统计图表配置
-const inspectionResultsOption = computed(() => ({
-  tooltip: {
-    trigger: 'axis',
-    axisPointer: {
-      type: 'shadow'
-    }
-  },
-  legend: {
-    data: ['发现数量', '已处理'],
-    textStyle: {
-      color: '#fff'
-    }
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '3%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'value',
-    axisLine: {
-      lineStyle: {
-        color: '#fff'
-      }
-    },
-    axisLabel: {
-      color: '#fff'
-    },
-    splitLine: {
-      lineStyle: {
-        color: 'rgba(255, 255, 255, 0.2)'
-      }
-    }
-  },
-  yAxis: {
-    type: 'category',
-    data: inspectionResults.value.categories,
-    axisLine: {
-      lineStyle: {
-        color: '#fff'
-      }
-    },
-    axisLabel: {
-      color: '#fff'
-    }
-  },
-  series: [
-    {
-      name: '发现数量',
-      type: 'bar',
-      data: inspectionResults.value.found,
-      itemStyle: {
-        color: '#409EFF'
-      }
-    },
-    {
-      name: '已处理',
-      type: 'bar',
-      data: inspectionResults.value.resolved,
-      itemStyle: {
-        color: '#67C23A'
-      }
-    }
-  ]
-}))
-
-// 高频问题路段图表配置
+// 高频问题类型图表配置
 const problemSectionsOption = computed(() => ({
   tooltip: {
     trigger: 'axis',
@@ -539,7 +454,7 @@ const problemSectionsOption = computed(() => ({
   },
   xAxis: {
     type: 'value',
-    name: '事件数量',
+    name: '问题数量',
     nameTextStyle: {
       color: '#fff'
     },
@@ -571,7 +486,7 @@ const problemSectionsOption = computed(() => ({
   },
   series: [
     {
-      name: '事件数量',
+      name: '问题数量',
       type: 'bar',
       data: problemSections.value.counts,
       itemStyle: {
@@ -590,135 +505,122 @@ const problemSectionsOption = computed(() => ({
 
 // 生命周期
 onMounted(async () => {
-  await loadDashboardData()
+  try {
+    await Promise.all([
+      airspaceStore.fetchAirspaces(),
+      fetchDashboardData()
+    ])
+  } catch (error) {
+    console.error('初始化数据失败:', error)
+  }
 })
 
 // 方法
-// API 衍生数据
-const flightTrend = ref<{ dates: string[]; counts: number[]; hours: number[] }>({ dates: [], counts: [], hours: [] })
-const inspectionResults = ref<{ categories: string[]; found: number[]; resolved: number[] }>({ categories: [], found: [], resolved: [] })
-const problemSections = ref<{ sections: string[]; counts: number[] }>({ sections: [], counts: [] })
-
+// 获取看板数据
 const loadDashboardData = async () => {
   try {
-    const params = (() => {
-      if (!dateRange.value || dateRange.value.length !== 2) return {}
-      const [start, end] = dateRange.value
-      return { start_date: start, end_date: end }
-    })()
+    const [start, end] = dateRange.value || []
+    const params = start && end ? { start_date: start, end_date: end } : {}
 
-    // 加载统计数据 - 使用dashboardApi
-    const [statsRes, flightStatsRes, airspaceUsageRes, alertStatsRes, alertTrendRes, flightTrendRes, inspectionResultsRes, problemSectionsRes] = await Promise.all([
-      dashboardApi.getStats(params),
-      dashboardApi.getFlightStats(params),
-      dashboardApi.getAirspaceUsage(params),
-      dashboardApi.getAlertStats(params),
-      dashboardApi.getAlertTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [] } })),
-      dashboardApi.getFlightTrend(params).catch(() => ({ code: 200, data: { dates: [], counts: [], hours: [] } })),
-      dashboardApi.getInspectionResults(params).catch(() => ({ code: 200, data: { categories: [], found: [], resolved: [] } })),
-      dashboardApi.getProblemSections(params).catch(() => ({ code: 200, data: { sections: [], counts: [] } }))
-    ])
-    
-    // 飞行统计卡片
-    if (flightStatsRes.code === 200 && flightStatsRes.data) {
+    // 获取飞行统计数据
+    const flightRes = await dashboardApi.getFlightStats(params)
+    if (flightRes.code === 200 && flightRes.data) {
       flightStats.value = {
-        total: flightStatsRes.data.total_missions || 0,
-        totalHours: flightStatsRes.data.total_duration || 0,
-        totalDistance: (flightStatsRes.data.total_missions || 0) * 5 // 假设每次任务平均5公里
+        total: flightRes.data.total_missions || 0,
+        totalHours: flightRes.data.total_duration || 0,
+        totalDistance: flightRes.data.total_distance || 0
       }
     }
 
-    // 飞行趋势
-    if (flightTrendRes.code === 200 && flightTrendRes.data) {
-      // 从flightTrendRes.data中获取飞行趋势数据
-      flightTrend.value = {
-        dates: flightTrendRes.data.dates || [],
-        counts: flightTrendRes.data.counts || [],
-        hours: flightTrendRes.data.hours || []
-      }
-    } else {
-      flightTrend.value = { dates: [], counts: [], hours: [] }
-    }
-
-    // 巡检成果
-    if (inspectionResultsRes.code === 200 && inspectionResultsRes.data) {
-      inspectionResults.value = {
-        categories: inspectionResultsRes.data.categories || [],
-        found: inspectionResultsRes.data.found || [],
-        resolved: inspectionResultsRes.data.resolved || []
-      }
-    } else {
-      // 使用模拟数据
-      inspectionResults.value = {
-        categories: ['裂缝', '坑洼', '护栏损坏', '标志模糊', '路面磨损'],
-        found: [28, 22, 15, 12, 23],
-        resolved: [25, 18, 12, 8, 20]
+    // 获取空域使用统计
+    const airspaceRes = await dashboardApi.getAirspaceUsage(params)
+    if (airspaceRes.code === 200 && airspaceRes.data) {
+      // 处理空域使用统计
+      const usageData = airspaceRes.data
+      let totalUsage = 0
+      usageData.forEach((item: any) => {
+        totalUsage += item.usage_count || 0
+      })
+      
+      airspaceUsage.value = {
+        available: 100 - totalUsage, // 简化处理
+        occupied: totalUsage,
+        unavailable: 0
       }
     }
 
-    // 高频问题路段
+    // 获取巡检结果统计数据
+    const inspectionTypeRes = await dashboardApi.getInspectionTypeDistribution(params)
+    if (inspectionTypeRes.code === 200 && inspectionTypeRes.data) {
+      // 更新巡检结果统计数据
+      const typeData = inspectionTypeRes.data
+      
+      // 计算总数
+      let totalResults = 0
+      Object.values(typeData).forEach(count => {
+        totalResults += count as number
+      })
+      
+      inspectionStats.value.totalResults = totalResults
+      
+      // 分别统计交通拥堵和道路破损总数
+      let trafficCongestionTotal = 0
+      let roadDamageTotal = 0
+      
+      Object.keys(typeData).forEach(key => {
+        if (key.includes('交通拥堵')) {
+          trafficCongestionTotal += typeData[key]
+        } else if (key.includes('道路破损')) {
+          roadDamageTotal += typeData[key]
+        }
+      })
+      
+      inspectionStats.value.trafficCongestion.total = trafficCongestionTotal
+      inspectionStats.value.roadDamage.total = roadDamageTotal
+      
+      // 更新拥堵程度统计
+      inspectionStats.value.trafficCongestion.light = typeData['交通拥堵-轻度 (light)'] || 0
+      inspectionStats.value.trafficCongestion.medium = typeData['交通拥堵-中度 (medium)'] || 0
+      inspectionStats.value.trafficCongestion.heavy = typeData['交通拥堵-重度 (heavy)'] || 0
+      
+      // 更新破损程度统计
+      inspectionStats.value.roadDamage.none = typeData['道路破损-无破损'] || 0
+      inspectionStats.value.roadDamage.light = typeData['道路破损-轻度破损'] || 0
+      inspectionStats.value.roadDamage.medium = typeData['道路破损-中度破损'] || 0
+      inspectionStats.value.roadDamage.severe = typeData['道路破损-严重破损'] || 0
+    }
+
+    // 获取巡检结果趋势
+    const inspectionTrendRes = await dashboardApi.getInspectionTrend({ ...params, days: 30 })
+    if (inspectionTrendRes.code === 200 && inspectionTrendRes.data) {
+      inspectionStats.value.trend = inspectionTrendRes.data
+    }
+
+    // 获取高频问题类型
+    const problemSectionsRes = await dashboardApi.getProblemSections(params)
     if (problemSectionsRes.code === 200 && problemSectionsRes.data) {
       problemSections.value = {
         sections: problemSectionsRes.data.sections || [],
         counts: problemSectionsRes.data.counts || []
       }
-    } else {
-      // 使用模拟数据
-      problemSections.value = {
-        sections: ['G15沈海高速K125', 'G2京沪高速K88', 'G3京台高速K205', 'G4京港澳高速K312', 'G5京昆高速K156', 'G6京藏高速K95', 'G7京新高速K234', 'G15沈海高速K89', 'G2京沪高速K145', 'G3京台高速K78'],
-        counts: [24, 22, 20, 18, 16, 14, 12, 10, 8, 6]
-      }
     }
     
-    // 告警统计
-    await Promise.all([
-      airspaceStore.fetchAirspaces(),
-      alertStore.fetchAlerts()
-    ])
-
-    if (alertStatsRes.code === 200 && alertStatsRes.data) {
-      // 更新告警统计数据
-      alertStats.value.total = alertStatsRes.data.total_alerts || 0;
-      
-      // 更新告警类型分布
-      const typeStats = alertStatsRes.data.type_stats || {};
-      alertStats.value.byType = {
-        traffic_accident: typeStats.traffic_accident || 0,
-        road_anomaly: typeStats.road_anomaly || 0,
-        facility_abnormal: typeStats.facility_abnormal || 0,
-        intrusion: typeStats.intrusion || 0,
-        collision: typeStats.collision || 0,
-        weather: typeStats.weather || 0
-      };
-    } else {
-      // 如果获取告警统计数据失败，尝试从store中获取统计数据
-      const stats = alertStore.getStatistics();
-      alertStats.value.total = stats.total;
-      
-      // 对于类型分布，我们需要从原始告警数据中统计
-      const alerts = alertStore.alerts;
-      alertStats.value.byType = {
-        traffic_accident: alerts.filter(a => a.event_type === 'traffic_accident').length,
-        road_anomaly: alerts.filter(a => a.event_type === 'road_anomaly').length,
-        facility_abnormal: alerts.filter(a => a.event_type === 'facility_abnormal').length,
-        intrusion: alerts.filter(a => a.event_type === 'intrusion').length,
-        collision: alerts.filter(a => a.event_type === 'collision').length,
-        weather: alerts.filter(a => a.event_type === 'weather').length
-      };
-    }
-
-    // 告警趋势
-    if (alertTrendRes.code === 200 && alertTrendRes.data) {
-      // 后端返回的是数组格式 [{date: "2023-01-01", count: 5}, ...]
-      // 直接使用后端返回的数据
-      alertStats.value.trend = alertTrendRes.data
+    // 获取飞行任务趋势
+    const flightTrendRes = await dashboardApi.getFlightTrend(params)
+    if (flightTrendRes.code === 200 && flightTrendRes.data) {
+      flightTrend.value = {
+        dates: flightTrendRes.data.dates || [],
+        counts: flightTrendRes.data.counts || [],
+        hours: flightTrendRes.data.hours || []
+      }
     }
   } catch (error) {
-    console.error('加载看板数据失败:', error)
-    // 失败时不使用虚拟数据，保持为空，仍加载基础数据避免卡片完全空白
-    await Promise.allSettled([airspaceStore.fetchAirspaces(), alertStore.fetchAlerts()])
+    console.error('获取看板数据失败:', error)
+    ElMessage.error('获取看板数据失败')
   }
 }
+
+const fetchDashboardData = loadDashboardData
 
 const handleDateChange = async () => {
   await loadDashboardData()
@@ -726,8 +628,13 @@ const handleDateChange = async () => {
 }
 
 const refreshData = async () => {
-  await loadDashboardData()
-  ElMessage.success('数据已刷新')
+  try {
+    await loadDashboardData()
+    ElMessage.success('数据已刷新')
+  } catch (error) {
+    console.error('刷新数据失败:', error)
+    ElMessage.error('刷新数据失败')
+  }
 }
 </script>
 

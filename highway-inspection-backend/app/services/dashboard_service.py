@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, text
-from app.models import db, Mission, AlertEvent, AirspaceUsage, Airspace
+from app.models import db, Mission, AirspaceUsage, Airspace, AnalysisResult, AlertEvent, Video
 
 
 class DashboardService:
@@ -23,15 +23,21 @@ class DashboardService:
 
         # 统计总时长（小时）
         total_duration = 0
+        # 统计总飞行距离（公里）
+        total_distance = 0
         for mission in missions:
             if mission.start_time and mission.end_time:
                 duration = (mission.end_time - mission.start_time).total_seconds() / 3600
                 total_duration += duration
+            
+            # 累加每个任务的飞行距离
+            total_distance += mission.calculate_route_distance()
 
         return {
             'total_missions': total_missions,
             'total_duration': round(total_duration, 2),
-            'average_duration': round(total_duration / total_missions, 2) if total_missions > 0 else 0
+            'total_distance': round(total_distance, 2),
+            #'average_duration': round(total_duration / total_missions, 2) if total_missions > 0 else 0
         }
 
     @staticmethod
@@ -157,6 +163,7 @@ class DashboardService:
 
         return result
 
+    #ai检测结果现存储在analysis_results表中，此功能暂不需用
     @staticmethod
     def get_alert_statistics(start_date=None, end_date=None):
         """获取告警统计"""
@@ -253,69 +260,162 @@ class DashboardService:
 
     @staticmethod
     def get_inspection_results(start_date=None, end_date=None):
-        """获取巡检成果统计"""
+        """获取巡检成果统计（按类型分组）"""
 
-        query = db.session.query(
-            AlertEvent.event_type,
-            func.count(AlertEvent.id).label('total_count')
-        )
+        # 查询交通拥堵类型的结果
+        traffic_query = db.session.query(
+            AnalysisResult.target_type,
+            func.count(AnalysisResult.id).label('total_count')
+        ).filter(AnalysisResult.target_type.contains('('))  # 交通拥堵类型包含括号
+
+        # 查询道路破损类型的结果
+        damage_query = db.session.query(
+            AnalysisResult.target_type,
+            func.count(AnalysisResult.id).label('total_count')
+        ).filter(~AnalysisResult.target_type.contains('('))  # 道路破损类型不包含括号
 
         if start_date:
-            query = query.filter(AlertEvent.occurred_time >= start_date)
+            traffic_query = traffic_query.filter(AnalysisResult.occurred_time >= start_date)
+            damage_query = damage_query.filter(AnalysisResult.occurred_time >= start_date)
         if end_date:
-            query = query.filter(AlertEvent.occurred_time <= end_date)
+            traffic_query = traffic_query.filter(AnalysisResult.occurred_time <= end_date)
+            damage_query = damage_query.filter(AnalysisResult.occurred_time <= end_date)
 
         # 按类型分组统计总数
-        type_results = query.group_by(AlertEvent.event_type).all()
-
-        # 按类型分组统计已解决的数量
-        resolved_results = query.filter(
-            AlertEvent.status == 'processing'  #或者是closed状态的告警
-        ).group_by(AlertEvent.event_type).all()
-
-        # 转换为字典便于查找
-        type_dict = {event_type: count for event_type, count in type_results}
-        resolved_dict = {event_type: count for event_type, count in resolved_results}
+        traffic_results = traffic_query.group_by(AnalysisResult.target_type).all()
+        damage_results = damage_query.group_by(AnalysisResult.target_type).all()
 
         # 构建返回数据
         categories = []
         found = []
-        resolved = []
 
-        for event_type, count in type_results:
-            categories.append(event_type)
+        # 添加交通拥堵类型统计
+        for target_type, count in traffic_results:
+            categories.append(f'交通拥堵-{target_type}')
             found.append(count)
-            resolved.append(resolved_dict.get(event_type, 0))
+
+        # 添加道路破损类型统计
+        for target_type, count in damage_results:
+            categories.append(f'道路破损-{target_type}')
+            found.append(count)
 
         return {
             'categories': categories,
             'found': found,
-            'resolved': resolved
+            'resolved': [0] * len(categories)  # 简化处理，暂不区分已处理和未处理
         }
 
     @staticmethod
-    def get_problem_sections(start_date=None, end_date=None):
-        """获取高频问题路段"""
-        # 查询告警事件中的路段统计数据
-        query = db.session.query(
-            AlertEvent.road_section,
-            func.count(AlertEvent.id).label('event_count')
-        )
-        
+    def get_inspection_results_statistics(start_date=None, end_date=None):
+        """获取巡检结果统计"""
+        query = AnalysisResult.query
 
         if start_date:
-            query = query.filter(AlertEvent.occurred_time >= start_date)
+            query = query.filter(AnalysisResult.occurred_time >= start_date)
         if end_date:
-            query = query.filter(AlertEvent.occurred_time <= end_date)
-            
-        # 按路段分组并统计事件数量
-        query = query.group_by(AlertEvent.road_section).order_by(func.count(AlertEvent.id).desc()) .limit(10)  # 获取前10个高频路段
-        
+            query = query.filter(AnalysisResult.occurred_time <= end_date)
+
         results = query.all()
+
+        # 总巡检结果数
+        total_results = len(results)
+
+        # 按事件类型统计
+        traffic_congestion_count = 0
+        road_damage_count = 0
         
-        # 提取路段名称和事件数量
-        sections = [row.road_section for row in results]
-        counts = [row.event_count for row in results]
+        # 拥堵程度统计
+        congestion_stats = {
+            '轻度 (light)': 0,
+            '中度 (medium)': 0,
+            '重度 (heavy)': 0
+        }
+        
+        # 破损程度统计
+        damage_stats = {
+            '无破损': 0,
+            '轻度破损': 0,
+            '中度破损': 0,
+            '严重破损': 0
+        }
+
+        for result in results:
+            # 根据target_type判断事件类型
+            if '(' in result.target_type:
+                traffic_congestion_count += 1
+                # 统计拥堵程度
+                if result.target_type in congestion_stats:
+                    congestion_stats[result.target_type] += 1
+            else:
+                road_damage_count += 1
+                # 统计破损程度
+                if result.target_type in damage_stats:
+                    damage_stats[result.target_type] += 1
+
+        return {
+            'total_results': total_results,
+            'traffic_congestion_count': traffic_congestion_count,
+            'road_damage_count': road_damage_count,
+            'congestion_stats': congestion_stats,
+            'damage_stats': damage_stats
+        }
+
+    @staticmethod
+    def get_inspection_results_trend(start_date=None, end_date=None):
+        """获取巡检结果趋势"""
+        # 默认显示最近30天
+        if not start_date or not end_date:
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=29)  # 30天包括今天
+            
+        days = (end_date - start_date).days + 1
+
+        # 按天分组统计
+        results = db.session.query(
+            func.date(AnalysisResult.occurred_time).label('date'),
+            func.count(AnalysisResult.id).label('count')
+        ).filter(
+            AnalysisResult.occurred_time >= start_date,
+            AnalysisResult.occurred_time <= end_date
+        ).group_by(func.date(AnalysisResult.occurred_time)).all()
+
+        # 构建完整的日期序列
+        trend = []
+        result_dict = {result.date: result.count for result in results}
+        
+        for i in range(days):
+            date = (start_date + timedelta(days=i)).date()
+            count = result_dict.get(date, 0)
+            trend.append({
+                'date': date.isoformat(),
+                'count': count
+            })
+
+        return trend
+
+    @staticmethod
+    def get_problem_sections(start_date=None, end_date=None):
+        """获取高频问题路段统计"""
+        # 按路段分组并统计数量
+        query = db.session.query(
+            Video.road_section,
+            func.count(AnalysisResult.id).label('count')
+        ).join(
+            AnalysisResult, Video.id == AnalysisResult.video_id
+        )
+        
+        if start_date:
+            query = query.filter(AnalysisResult.occurred_time >= start_date)
+        if end_date:
+            query = query.filter(AnalysisResult.occurred_time <= end_date)
+            
+        query = query.group_by(Video.road_section).order_by(func.count(AnalysisResult.id).desc()).limit(10)
+        
+        section_results = query.all()
+        
+        # 提取路段和数量
+        sections = [row.road_section for row in section_results]
+        counts = [int(row.count) for row in section_results]
         
         return {
             'sections': sections,
@@ -323,20 +423,73 @@ class DashboardService:
         }
 
     @staticmethod
+    def get_inspection_type_distribution(start_date=None, end_date=None):
+        """获取巡检结果类型分布"""
+        query = AnalysisResult.query
+
+        if start_date:
+            query = query.filter(AnalysisResult.occurred_time >= start_date)
+        if end_date:
+            query = query.filter(AnalysisResult.occurred_time <= end_date)
+
+        results = query.all()
+
+        # 拥堵程度统计
+        congestion_stats = {
+            '轻度 (light)': 0,
+            '中度 (medium)': 0,
+            '重度 (heavy)': 0
+        }
+        
+        # 破损程度统计
+        damage_stats = {
+            '无破损': 0,
+            '轻度破损': 0,
+            '中度破损': 0,
+            '严重破损': 0
+        }
+
+        for result in results:
+            # 根据target_type判断事件类型并统计
+            if '(' in result.target_type:
+                # 交通拥堵类型
+                if result.target_type in congestion_stats:
+                    congestion_stats[result.target_type] += 1
+            else:
+                # 道路破损类型
+                if result.target_type in damage_stats:
+                    damage_stats[result.target_type] += 1
+
+        # 合并统计数据
+        type_distribution = {}
+        # 添加交通拥堵统计
+        for level, count in congestion_stats.items():
+            if count > 0:  # 只添加有数据的项
+                type_distribution[f'交通拥堵-{level}'] = count
+        
+        # 添加道路破损统计
+        for level, count in damage_stats.items():
+            if count > 0:  # 只添加有数据的项
+                type_distribution[f'道路破损-{level}'] = count
+
+        return type_distribution
+
+    @staticmethod
     def get_dashboard_overview(start_date=None, end_date=None):
         """获取看板总览"""
         flight_stats = DashboardService.get_flight_statistics(start_date, end_date)
         airspace_stats = DashboardService.get_airspace_usage_statistics(start_date, end_date)
-        alert_stats = DashboardService.get_alert_statistics(start_date, end_date)
-        alert_trend = DashboardService.get_alert_trend(start_date=start_date, end_date=end_date)
+        # 使用新的巡检结果统计替代告警统计
+        inspection_stats = DashboardService.get_inspection_results_statistics(start_date, end_date)
+        inspection_trend = DashboardService.get_inspection_results_trend(start_date=start_date, end_date=end_date)
         inspection_results = DashboardService.get_inspection_results(start_date, end_date)
         problem_sections = DashboardService.get_problem_sections(start_date, end_date)
 
         return {
             'flight_statistics': flight_stats,
             'airspace_usage': airspace_stats,
-            'alert_statistics': alert_stats,
-            'alert_trend': alert_trend,
+            'inspection_statistics': inspection_stats,  
+            'inspection_trend': inspection_trend,
             'inspection_results': inspection_results,
             'problem_sections': problem_sections
         }
