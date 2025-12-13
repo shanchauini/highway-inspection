@@ -9,6 +9,19 @@ from app.utils import success_response, error_response, login_required
 dashboard_bp = Blueprint('dashboard', __name__)
 
 
+def parse_date(date_str):
+    """解析日期字符串，支持 YYYY-MM-DD 格式和 ISO 格式"""
+    if not date_str:
+        return None
+    try:
+        if 'T' in date_str or 'Z' in date_str:
+            return datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+        else:
+            return datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError as e:
+        raise ValueError(f'无效的日期格式: {date_str}') from e
+
+
 @dashboard_bp.route('/stats', methods=['GET'])
 @login_required
 def get_dashboard_stats():
@@ -172,10 +185,13 @@ def get_flight_trend():
         start_date = None
         end_date = None
 
-        if start_date_str:
-            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00')).date()
-        if end_date_str:
-            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00')).date()
+        try:
+            if start_date_str:
+                start_date = parse_date(start_date_str)
+            if end_date_str:
+                end_date = parse_date(end_date_str)
+        except ValueError as e:
+            return error_response(str(e), 400)
 
         data = DashboardService.get_flight_trend(start_date=start_date, end_date=end_date, user=user)
 
@@ -274,30 +290,3 @@ def get_inspection_type_distribution():
     except Exception as e:
         return error_response(f'获取巡检结果类型分布失败: {str(e)}', 500)
 
-
-@dashboard_bp.route('/problem-sections', methods=['GET'])
-@login_required
-def get_problem_sections():
-    """获取高频问题路段"""
-    try:
-        # 获取当前用户
-        user_id = get_jwt_identity()
-        user = User.query.get(int(user_id))
-        
-        start_date_str = request.args.get('start_date', None)
-        end_date_str = request.args.get('end_date', None)
-
-        start_date = None
-        end_date = None
-
-        if start_date_str:
-            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00')).date()
-        if end_date_str:
-            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00')).date()
-
-        data = DashboardService.get_problem_sections(start_date, end_date, user)
-
-        return success_response(data=data)
-
-    except Exception as e:
-        return error_response(f'获取高频问题路段失败: {str(e)}', 500)

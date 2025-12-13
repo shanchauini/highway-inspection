@@ -49,9 +49,14 @@ export const videoApi = {
     })
   },
 
-  // 获取视频分析结果
-  getAnalysisResults: (id: string | number) => {
-    return api.get(`/videos/${id}/analysis-results`)
+  // 获取视频分析结果（支持分页）
+  getAnalysisResults: (id: string | number, params?: any) => {
+    return api.get(`/videos/${id}/analysis-results`, { params })
+  },
+
+  // 触发AI分析
+  analyzeVideo: (id: string | number, detectionType: string = 'traffic_congestion') => {
+    return api.post(`/videos/${id}/analyze`, { detection_type: detectionType })
   }
 }
 
@@ -307,11 +312,6 @@ export const dashboardApi = {
   // 获取巡检结果类型分布
   getInspectionTypeDistribution: (params?: any) => {
     return api.get('/dashboard/inspection-type-distribution', { params })
-  },
-  
-  // 获取高频问题路段
-  getProblemSections: (params?: any) => {
-    return api.get('/dashboard/problem-sections', { params })
   }
 }
 

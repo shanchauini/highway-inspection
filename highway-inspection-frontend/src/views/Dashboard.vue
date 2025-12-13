@@ -97,14 +97,6 @@
         </template>
         <v-chart class="chart" :option="inspectionTrendOption" autoresize />
       </el-card>
-
-      <!-- 高频问题类型 -->
-      <el-card shadow="never" class="chart-card large cosmic-card">
-        <template #header>
-          <span class="cosmic-title-small">高频问题路段 TOP10</span>
-        </template>
-        <v-chart class="chart" :option="problemSectionsOption" autoresize />
-      </el-card>
     </div>
   </div>
 </template>
@@ -146,10 +138,17 @@ use([
 const airspaceStore = useAirspaceStore()
 
 // 响应式数据
-const dateRange = ref<[string, string]>([
-  new Date(Date.now() - 30 * 24 * 3600000).toISOString().split('T')[0],
-  new Date().toISOString().split('T')[0]
-])
+// 默认日期范围：从30天前到今日
+const getDefaultDateRange = (): [string, string] => {
+  const today = new Date()
+  const thirtyDaysAgo = new Date(today)
+  thirtyDaysAgo.setDate(today.getDate() - 29) // 30天前（包含今天，所以是29天前）
+  return [
+    thirtyDaysAgo.toISOString().split('T')[0],
+    today.toISOString().split('T')[0]
+  ]
+}
+const dateRange = ref<[string, string]>(getDefaultDateRange())
 
 // 飞行统计数据（后端返回）
 const flightStats = ref({
@@ -188,11 +187,6 @@ const airspaceUsage = ref({
   available: 0,
   occupied: 0,
   unavailable: 0
-})
-
-const problemSections = ref({
-  sections: [],
-  counts: []
 })
 
 // 飞行趋势图表配置
@@ -438,71 +432,6 @@ const inspectionTrendOption = computed(() => {
   }
 })
 
-// 高频问题类型图表配置
-const problemSectionsOption = computed(() => ({
-  tooltip: {
-    trigger: 'axis',
-    axisPointer: {
-      type: 'shadow'
-    }
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '3%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'value',
-    name: '问题数量',
-    nameTextStyle: {
-      color: '#fff'
-    },
-    axisLine: {
-      lineStyle: {
-        color: '#fff'
-      }
-    },
-    axisLabel: {
-      color: '#fff'
-    },
-    splitLine: {
-      lineStyle: {
-        color: 'rgba(255, 255, 255, 0.2)'
-      }
-    }
-  },
-  yAxis: { 
-    type: 'category', 
-    data: problemSections.value.sections,
-    axisLine: {
-      lineStyle: {
-        color: '#fff'
-      }
-    },
-    axisLabel: {
-      color: '#fff'
-    }
-  },
-  series: [
-    {
-      name: '问题数量',
-      type: 'bar',
-      data: problemSections.value.counts,
-      itemStyle: {
-        color: (params: any) => {
-          const colors = ['#F56C6C', '#E6A23C', '#409EFF', '#67C23A']
-          return colors[Math.floor(params.dataIndex / 3)]
-        }
-      },
-      label: {
-        show: true,
-        position: 'right'
-      }
-    }
-  ]
-}))
-
 // 生命周期
 onMounted(async () => {
   try {
@@ -594,15 +523,6 @@ const loadDashboardData = async () => {
     const inspectionTrendRes = await dashboardApi.getInspectionTrend({ ...params, days: 30 })
     if (inspectionTrendRes.code === 200 && inspectionTrendRes.data) {
       inspectionStats.value.trend = inspectionTrendRes.data
-    }
-
-    // 获取高频问题类型
-    const problemSectionsRes = await dashboardApi.getProblemSections(params)
-    if (problemSectionsRes.code === 200 && problemSectionsRes.data) {
-      problemSections.value = {
-        sections: problemSectionsRes.data.sections || [],
-        counts: problemSectionsRes.data.counts || []
-      }
     }
     
     // 获取飞行任务趋势

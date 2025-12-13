@@ -101,17 +101,27 @@ export const useVideoStore = defineStore('video', () => {
     }
   }
 
-  // 获取视频分析结果
-  const fetchAnalysisResults = async (id: number) => {
+  // 获取视频分析结果（支持分页）
+  const fetchAnalysisResults = async (id: number, page: number = 1, pageSize: number = 10) => {
     try {
-      const response = await videoApi.getAnalysisResults(id) as ApiResponse<any[]>
+      const response = await videoApi.getAnalysisResults(id, { page, page_size: pageSize }) as ApiResponse<any>
       if (response.code === 200 && response.data) {
-        return response.data
+        // 如果返回的是分页数据
+        if (response.data.items) {
+          return response.data
+        }
+        // 如果返回的是数组（兼容旧接口）
+        return {
+          items: response.data,
+          total: response.data.length,
+          page: 1,
+          page_size: response.data.length
+        }
       }
-      return []
+      return { items: [], total: 0, page: 1, page_size: pageSize }
     } catch (error: any) {
       console.error('获取分析结果失败:', error)
-      return []
+      return { items: [], total: 0, page: 1, page_size: pageSize }
     }
   }
 
@@ -140,6 +150,27 @@ export const useVideoStore = defineStore('video', () => {
     }
   }
 
+  // 触发AI分析
+  const analyzeVideo = async (id: number, detectionType: string = 'traffic_congestion') => {
+    loading.value = true
+    try {
+      const response = await videoApi.analyzeVideo(id, detectionType) as ApiResponse<any>
+      if (response.code === 200 || response.code === 201) {
+        ElMessage.success(response.message || 'AI分析已启动')
+        return response.data
+      } else {
+        throw new Error(response.message || '启动AI分析失败')
+      }
+    } catch (error: any) {
+      console.error('启动AI分析失败:', error)
+      const errorMsg = error.response?.data?.message || error.message || '启动AI分析失败'
+      ElMessage.error(errorMsg)
+      throw error
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     videos,
     loading,
@@ -150,7 +181,8 @@ export const useVideoStore = defineStore('video', () => {
     fetchVideos,
     createVideo,
     fetchAnalysisResults,
-    uploadMediaFile
+    uploadMediaFile,
+    analyzeVideo
   }
 })
 

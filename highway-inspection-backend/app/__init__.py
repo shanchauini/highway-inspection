@@ -54,9 +54,31 @@ def create_app(config_name=None):
     @app.route('/uploads/<path:filename>')
     def serve_uploads(filename):
         """提供上传文件的访问"""
-        # 使用 uploads 根目录，支持所有子目录
+        # 使用 uploads 根目录，支持所有子目录（包括 detected_frames）
         uploads_base = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
-        return send_from_directory(uploads_base, filename)
+        try:
+            # Flask会自动处理URL编码，但我们需要确保路径正确
+            # 处理URL编码的文件名（特别是中文文件名）
+            import urllib.parse
+            # 如果文件名包含URL编码，先解码
+            decoded_filename = urllib.parse.unquote(filename)
+            response = send_from_directory(uploads_base, decoded_filename)
+            # 设置CORS头，允许跨域访问
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+            # 设置正确的Content-Type
+            if filename.lower().endswith('.jpg') or filename.lower().endswith('.jpeg'):
+                response.headers['Content-Type'] = 'image/jpeg'
+            elif filename.lower().endswith('.png'):
+                response.headers['Content-Type'] = 'image/png'
+            return response
+        except FileNotFoundError:
+            from app.utils import error_response
+            return error_response(f'文件不存在: {filename}', 404)
+        except Exception as e:
+            from app.utils import error_response
+            return error_response(f'访问文件失败: {str(e)}', 500)
 
     return app
 

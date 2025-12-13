@@ -52,7 +52,10 @@
               controls
               class="video-player"
               :src="currentMedia"
-            ></video>
+              @error="handleVideoError"
+            >
+              您的浏览器不支持视频播放
+            </video>
           </div>
         </el-card>
       </el-col>
@@ -71,6 +74,15 @@
                 @click="loadAnalysisResults"
               >
                 刷新结果
+              </el-button>
+              <el-button 
+                v-if="currentVideoId && analysisResults.length === 0" 
+                size="small" 
+                type="success" 
+                :loading="analyzing"
+                @click="startAnalysis"
+              >
+                开始分析
               </el-button>
             </div>
           </template>
@@ -96,6 +108,18 @@
                 class="traffic-result-card"
                 :class="getTrafficLevelClass(result.target_type)"
               >
+                <!-- 帧图片展示（如果有） -->
+                <div v-if="result.result_image" class="traffic-frame-image-container">
+                  <img 
+                    :src="buildFileUrl(result.result_image)" 
+                    class="traffic-frame-image"
+                    alt="检测帧图片"
+                    @click="showTrafficFrameImage(result.result_image)"
+                    @error="handleImageError"
+                  />
+                  <div class="image-hint">点击查看大图</div>
+                </div>
+                
                 <div class="traffic-level-indicator">
                   <div class="level-icon">
                     <el-icon :size="40">
@@ -149,6 +173,20 @@
                   <el-icon><InfoFilled /></el-icon>
                   <span>中度拥堵提示：请关注交通状况变化</span>
                 </div>
+              </div>
+              
+              <!-- 分页组件 -->
+              <div v-if="analysisTotal > analysisPageSize" class="analysis-pagination">
+                <el-pagination
+                  v-model:current-page="analysisCurrentPage"
+                  v-model:page-size="analysisPageSize"
+                  :page-sizes="[5, 10, 20, 50]"
+                  :total="analysisTotal"
+                  layout="total, sizes, prev, pager, next"
+                  small
+                  @size-change="handleAnalysisSizeChange"
+                  @current-change="handleAnalysisPageChange"
+                />
               </div>
             </div>
           </div>
@@ -235,6 +273,20 @@
                   </div>
                 </div>
               </div>
+              
+              <!-- 分页组件 -->
+              <div v-if="analysisTotal > analysisPageSize" class="analysis-pagination">
+                <el-pagination
+                  v-model:current-page="analysisCurrentPage"
+                  v-model:page-size="analysisPageSize"
+                  :page-sizes="[5, 10, 20, 50]"
+                  :total="analysisTotal"
+                  layout="total, sizes, prev, pager, next"
+                  small
+                  @size-change="handleAnalysisSizeChange"
+                  @current-change="handleAnalysisPageChange"
+                />
+              </div>
             </div>
           </div>
           
@@ -248,12 +300,30 @@
         
         <!-- 结果图片大图弹窗（移到条件块外面） -->
         <el-dialog v-model="showFullImage" title="检测结果" width="80%">
-          <img 
-            v-if="roadDamageResultImage"
-            :src="roadDamageResultImage" 
-            style="width: 100%; height: auto;"
-            alt="检测结果大图"
-          />
+          <div class="full-image-container">
+            <img 
+              v-if="roadDamageResultImage"
+              :src="roadDamageResultImage" 
+              style="width: 100%; height: auto;"
+              alt="检测结果大图"
+              @error="handleImageError"
+            />
+            <el-empty v-else description="图片加载失败" />
+          </div>
+        </el-dialog>
+        
+        <!-- 交通拥堵帧图片大图弹窗 -->
+        <el-dialog v-model="showTrafficFrameDialog" title="检测帧图片" width="80%">
+          <div class="full-image-container">
+            <img 
+              v-if="currentTrafficFrameImage"
+              :src="currentTrafficFrameImage" 
+              style="width: 100%; height: auto;"
+              alt="检测帧图片"
+              @error="handleImageError"
+            />
+            <el-empty v-else description="图片加载失败" />
+          </div>
         </el-dialog>
       </el-col>
     </el-row>
@@ -321,19 +391,59 @@ const selectedFile = ref<File | null>(null)
 const videoPlayer = ref<HTMLVideoElement>()
 const analysisResults = ref<AnalysisResult[]>([])
 const loadingAnalysis = ref(false)
+const analyzing = ref(false)
 const showFullImage = ref(false)
+const showTrafficFrameDialog = ref(false)
+const currentTrafficFrameImage = ref('')
+
+// 统一的文件路径构建函数
+const buildFileUrl = (filePath: string): string => {
+  if (!filePath) return ''
+  
+  // 获取API基础URL（移除/api后缀，因为静态文件不在/api下）
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace('/api', '')
+  
+  // 处理Windows路径（包含反斜杠）
+  let processedPath = filePath.replace(/\\/g, '/')
+  
+  // 提取uploads后的路径（包括detected_frames目录）
+  if (processedPath.includes('uploads')) {
+    const parts = processedPath.split('uploads')
+    processedPath = '/uploads' + parts[parts.length - 1]
+  } else if (processedPath.includes('detected_frames')) {
+    // 处理detected_frames目录下的文件
+    const parts = processedPath.split('detected_frames')
+    // 从detected_frames向上查找uploads目录
+    const pathParts = processedPath.split('/')
+    const uploadsIndex = pathParts.findIndex(p => p === 'uploads')
+    if (uploadsIndex >= 0) {
+      processedPath = '/' + pathParts.slice(uploadsIndex).join('/')
+    } else {
+      // 如果找不到uploads，直接使用detected_frames后的路径，并添加uploads前缀
+      processedPath = '/uploads' + parts[parts.length - 1]
+    }
+  } else if (!processedPath.startsWith('/')) {
+    processedPath = '/' + processedPath
+  }
+  
+  // 确保路径格式正确
+  processedPath = processedPath.replace(/\/+/g, '/')
+  
+  const fullUrl = `${apiBaseUrl}${processedPath}`
+  console.log('构建文件URL:', { original: filePath, processed: processedPath, full: fullUrl })
+  return fullUrl
+}
+// 检测结果分页
+const analysisCurrentPage = ref(1)
+const analysisPageSize = ref(10)
+const analysisTotal = ref(0)
 
 // 获取地面破损检测结果图片URL
 const roadDamageResultImage = computed(() => {
   const firstResult = analysisResults.value[0]
   if (firstResult && firstResult.result_image) {
-    const imagePath = firstResult.result_image
-    // 将本地路径转换为可访问的URL
-    // 路径格式: uploads/detection_results/road_damage/xxx.jpg
-    const relativePath = imagePath.replace(/\\/g, '/').split('uploads/')[1]
-    if (relativePath) {
-      return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}/uploads/${relativePath}`
-    }
+    // 使用统一的路径构建函数
+    return buildFileUrl(firstResult.result_image)
   }
   return null
 })
@@ -447,28 +557,87 @@ const formatTime = (time: string) => {
   })
 }
 
-// 加载分析结果
-const loadAnalysisResults = async () => {
+// 开始AI分析
+const startAnalysis = async () => {
+  if (!currentVideoId.value) {
+    ElMessage.warning('请先选择视频或图片')
+    return
+  }
+  
+  // 调试：检查方法是否存在
+  if (!videoStore.analyzeVideo) {
+    console.error('analyzeVideo 方法不存在于 videoStore 中')
+    console.log('videoStore 可用方法:', Object.keys(videoStore))
+    ElMessage.error('AI分析功能不可用，请刷新页面重试')
+    return
+  }
+  
+  analyzing.value = true
+  try {
+    console.log('开始AI分析:', { videoId: currentVideoId.value, detectionType: detectionType.value })
+    await videoStore.analyzeVideo(currentVideoId.value, detectionType.value)
+    // 分析启动后，等待几秒再加载结果
+    setTimeout(() => {
+      loadAnalysisResults()
+    }, 2000)
+  } catch (error) {
+    console.error('启动AI分析失败:', error)
+  } finally {
+    analyzing.value = false
+  }
+}
+
+// 加载分析结果（支持分页）
+const loadAnalysisResults = async (page: number = 1, pageSize: number = 10) => {
   if (!currentVideoId.value) return
   
   loadingAnalysis.value = true
   try {
-    const results = await videoStore.fetchAnalysisResults(currentVideoId.value)
-    analysisResults.value = results || []
+    // 调用API获取分页结果
+    const response = await videoStore.fetchAnalysisResults(
+      currentVideoId.value, 
+      page, 
+      pageSize
+    )
+    if (response) {
+      analysisResults.value = response.items || response || []
+      analysisTotal.value = response.total || (response.items ? response.items.length : 0)
+      analysisCurrentPage.value = response.page || page
+      analysisPageSize.value = response.page_size || pageSize
+    } else {
+      analysisResults.value = []
+      analysisTotal.value = 0
+    }
   } catch (error) {
     console.error('加载分析结果失败:', error)
     ElMessage.error('加载分析结果失败')
+    analysisResults.value = []
+    analysisTotal.value = 0
   } finally {
     loadingAnalysis.value = false
   }
 }
 
+// 检测结果分页变化
+const handleAnalysisPageChange = (page: number) => {
+  analysisCurrentPage.value = page
+  loadAnalysisResults(page, analysisPageSize.value)
+}
+
+const handleAnalysisSizeChange = (size: number) => {
+  analysisPageSize.value = size
+  analysisCurrentPage.value = 1
+  loadAnalysisResults(1, size)
+}
+
 // 监听视频ID变化，自动加载分析结果
 watch(currentVideoId, (newId) => {
   if (newId) {
-    loadAnalysisResults()
+    analysisCurrentPage.value = 1
+    loadAnalysisResults(1, analysisPageSize.value)
   } else {
     analysisResults.value = []
+    analysisTotal.value = 0
   }
 })
 
@@ -484,6 +653,59 @@ const handleFileChange = (file: any) => {
   } else if (file.raw.type.startsWith('video/')) {
     mediaType.value = 'video'
   }
+}
+
+// 处理视频播放错误
+const handleVideoError = (event: any) => {
+  console.error('视频播放错误:', event)
+  const video = event.target as HTMLVideoElement
+  const error = video.error
+  
+  if (error) {
+    let errorMessage = '视频播放失败'
+    
+    switch (error.code) {
+      case MediaError.MEDIA_ERR_ABORTED:
+        errorMessage = '视频加载被中止'
+        break
+      case MediaError.MEDIA_ERR_NETWORK:
+        errorMessage = '网络错误，无法加载视频'
+        break
+      case MediaError.MEDIA_ERR_DECODE:
+        errorMessage = '视频解码失败，可能是格式不支持。如果是AVI格式，系统已尝试转换为MP4，但可能仍不兼容您的浏览器'
+        break
+      case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+        errorMessage = '视频格式不支持。建议使用MP4格式（H.264编码）'
+        break
+      default:
+        errorMessage = error.message || '未知错误'
+    }
+    
+    console.error('视频错误代码:', error.code)
+    console.error('视频错误信息:', error.message)
+    console.log('当前视频路径:', currentMedia.value)
+    
+    ElMessage.error(errorMessage)
+  } else {
+    ElMessage.error('视频播放失败，请检查视频文件路径或格式')
+  }
+}
+
+// 处理图片加载错误
+const handleImageError = (event: any) => {
+  console.error('图片加载错误:', event)
+  console.log('图片路径:', event.target?.src)
+  ElMessage.error('图片加载失败，请检查图片路径')
+}
+
+// 显示交通拥堵帧图片大图
+const showTrafficFrameImage = (imagePath: string) => {
+  if (imagePath) {
+    currentTrafficFrameImage.value = buildFileUrl(imagePath)
+  } else {
+    currentTrafficFrameImage.value = ''
+  }
+  showTrafficFrameDialog.value = true
 }
 
 const confirmUpload = async () => {
@@ -515,23 +737,23 @@ const confirmUpload = async () => {
     const response = await videoStore.uploadMediaFile(formData)
     
     if (response) {
-      // 创建本地预览URL
-      const mediaUrl = URL.createObjectURL(selectedFile.value)
-      currentMedia.value = mediaUrl
+      if (response.video_path) {
+        // 使用统一的路径构建函数
+        currentMedia.value = buildFileUrl(response.video_path)
+      } else {
+        // 如果没有路径，使用本地预览（仅用于新上传的文件）
+        const mediaUrl = URL.createObjectURL(selectedFile.value)
+        currentMedia.value = mediaUrl
+      }
       currentVideoId.value = response.id
       
       ElMessage.success(`${mediaType.value === 'image' ? '图片' : '视频'}导入成功`)
       uploadDialogVisible.value = false
       
-      // 如果是图片，立即加载分析结果
-      if (mediaType.value === 'image') {
-        setTimeout(() => {
-          loadAnalysisResults()
-        }, 2000) // 给后端处理时间
-      } else {
-        // 视频需要手动触发分析
-        ElMessage.info('视频已上传，请等待分析完成后刷新结果')
-      }
+      // 上传成功后，不再自动进行AI分析，用户可以手动触发
+      // 清空分析结果，等待用户点击"开始分析"按钮
+      analysisResults.value = []
+      
     }
   } catch (error) {
     console.error('文件上传失败:', error)
@@ -787,6 +1009,8 @@ onMounted(async () => {
 
 .traffic-result-display {
   padding: 8px 0;
+  max-height: 600px;
+  overflow-y: auto;
 }
 
 .traffic-result-card {
@@ -794,6 +1018,27 @@ onMounted(async () => {
   border-radius: 12px;
   margin-bottom: 16px;
   transition: all 0.3s ease;
+}
+
+.traffic-frame-image-container {
+  margin-bottom: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+}
+
+.traffic-frame-image {
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+  object-fit: contain;
+  background: #000;
+  transition: transform 0.3s ease;
+}
+
+.traffic-frame-image:hover {
+  transform: scale(1.02);
 }
 
 .traffic-result-card.level-heavy {
@@ -960,6 +1205,15 @@ onMounted(async () => {
 .damage-list {
   max-height: 300px;
   overflow-y: auto;
+}
+
+/* 检测结果分页样式 */
+.analysis-pagination {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: center;
 }
 
 .damage-item {

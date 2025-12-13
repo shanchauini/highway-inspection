@@ -9,7 +9,7 @@ class DashboardService:
     @staticmethod
     def get_flight_statistics(start_date=None, end_date=None, user=None):
         """获取飞行统计"""
-        # 修改查询条件，统计所有状态的任务
+        # 统计所有状态的任务（与get_flight_trend保持一致，但趋势图只显示completed状态）
         query = Mission.query
 
         # 如果用户不是管理员，只显示该用户相关的任务
@@ -58,10 +58,9 @@ class DashboardService:
             start_date = end_date - timedelta(days=29)  # 开始日期是30天前
             days_count = 30
 
-        # 修复：结束日期应该包含当天的所有结果
-        end_date_end = datetime.combine(end_date, datetime.max.time())
-        
-        # 构造基础查询语句
+        # 构造基础查询语句（使用日期比较，确保包含边界日期）
+        # 注意：DATE(start_time) 会提取日期部分，比较时应该包含边界
+        # 使用 CAST 或直接比较，确保日期边界正确
         base_sql = """
                 SELECT 
                     DATE(start_time) as flight_date,
@@ -69,8 +68,8 @@ class DashboardService:
                     SUM(TIMESTAMPDIFF(SECOND, start_time, end_time)) / 3600 as flight_hours
                 FROM missions 
                 WHERE status = 'completed' 
-                  AND DATE(start_time) >= :start_date 
-                  AND DATE(start_time) <= :end_date 
+                  AND DATE(start_time) >= :start_date
+                  AND DATE(start_time) <= :end_date
         """
         
         # 如果用户不是管理员，添加用户过滤条件
@@ -84,10 +83,10 @@ class DashboardService:
         
         sql_query = text(base_sql)
         
-        # 准备参数
+        # 准备参数（使用日期对象，不是datetime）
         params = {
             'start_date': start_date,
-            'end_date': end_date_end  # 使用修正后的结束日期
+            'end_date': end_date  # 使用日期对象，SQL的DATE()函数会正确处理
         }
         
         # 如果用户不是管理员，添加用户ID参数
@@ -102,20 +101,36 @@ class DashboardService:
         counts_list = []  # 存储任务数量
         hours_list = []  # 存储飞行时长
 
-        # 将数据库结果按日期存储
+        # 将数据库结果按日期存储（统一使用YYYY-MM-DD格式）
         database_data = {}
         for row in database_rows:
-            date_str = row.flight_date.isoformat()
+            # 确保日期格式统一为YYYY-MM-DD字符串
+            # 处理日期对象（可能是date对象或datetime对象）
+            if hasattr(row.flight_date, 'date'):
+                # 如果是datetime对象，提取日期部分
+                flight_date = row.flight_date.date()
+            else:
+                # 如果是date对象，直接使用
+                flight_date = row.flight_date
+            
+            # 统一转换为YYYY-MM-DD格式字符串
+            if hasattr(flight_date, 'strftime'):
+                date_str = flight_date.strftime("%Y-%m-%d")
+            elif hasattr(flight_date, 'isoformat'):
+                date_str = flight_date.isoformat()
+            else:
+                date_str = str(flight_date)
+            
             database_data[date_str] = {
-                'count': row.mission_count,
-                'hours': row.flight_hours if row.flight_hours else 0.0
+                'count': int(row.mission_count) if row.mission_count else 0,
+                'hours': float(row.flight_hours) if row.flight_hours else 0.0
             }
 
         # 循环处理每一天，填充三个列表
         for day_index in range(days_count):
             # 计算当前要处理的日期
             current_date = start_date + timedelta(days=day_index)
-            date_str = current_date.strftime("%Y-%m-%d")  #注意格式！此时字典里的key是date字符串而不是datetime
+            date_str = current_date.strftime("%Y-%m-%d")  # 统一使用YYYY-MM-DD格式
 
             if date_str in database_data:
                 # 如果有数据，使用数据库中的数据
@@ -368,14 +383,17 @@ class DashboardService:
 
     @staticmethod
     def get_inspection_results_statistics(start_date=None, end_date=None, user=None):
-        """获取巡检结果统计"""
+        """获取巡检结果统计（与inspection_results.py保持完全一致）"""
+        from app.models import AnalysisResult, Mission
+        
         query = AnalysisResult.query
 
-        # 如果用户不是管理员，只显示该用户相关的巡检结果
+        # 操作员只能查看自己任务的巡检结果（与inspection_results.py保持一致）
         if user and not user.is_admin():
             mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
             query = query.filter(AnalysisResult.mission_id.in_(mission_ids))
 
+        # 根据时间范围筛选（与inspection_results.py保持一致）
         if start_date:
             query = query.filter(AnalysisResult.occurred_time >= start_date)
         if end_date:
@@ -385,10 +403,10 @@ class DashboardService:
 
         results = query.all()
 
-        # 总巡检结果数
+        # 统计总数（与inspection_results.py保持一致）
         total_results = len(results)
 
-        # 按事件类型统计
+        # 按事件类型统计（与inspection_results.py保持完全一致）
         traffic_congestion_count = 0
         road_damage_count = 0
         
@@ -408,8 +426,7 @@ class DashboardService:
         }
 
         for result in results:
-            # 根据target_type判断事件类型
-            # 更准确地判断拥堵和破损类型
+            # 根据target_type判断事件类型（与inspection_results.py保持完全一致）
             if result.target_type in congestion_stats:
                 traffic_congestion_count += 1
                 congestion_stats[result.target_type] += 1
@@ -472,43 +489,6 @@ class DashboardService:
             # 如果没有提供时间范围，直接返回查询结果
             return [{'date': r.date.isoformat(), 'count': r.count} for r in results]
 
-    @staticmethod
-    def get_problem_sections(start_date=None, end_date=None, user=None):
-        """获取高频问题路段统计"""
-        # 按路段分组并统计数量
-        query = db.session.query(
-            Video.road_section,
-            func.count(AnalysisResult.id).label('count')
-        ).join(
-            AnalysisResult, Video.id == AnalysisResult.video_id
-        )
-        
-        # 如果用户不是管理员，只显示该用户相关的巡检结果
-        if user and not user.is_admin():
-            mission_ids = [m.id for m in Mission.query.filter_by(operator_id=user.id).all()]
-            query = query.filter(AnalysisResult.mission_id.in_(mission_ids))
-        
-        if start_date:
-            query = query.filter(AnalysisResult.occurred_time >= start_date)
-        if end_date:
-            # 修复：结束日期应该包含当天的所有结果
-            end_date_end = datetime.combine(end_date, datetime.max.time())
-            query = query.filter(AnalysisResult.occurred_time <= end_date_end)
-            
-        query = query.group_by(Video.road_section).order_by(func.count(AnalysisResult.id).desc()).limit(10)
-        
-        section_results = query.all()
-        
-        # 提取路段和数量
-        sections = [row.road_section for row in section_results]
-        counts = [int(row.count) for row in section_results]
-        
-        return {
-            'sections': sections,
-            'counts': counts
-        }
-
-    @staticmethod
     def get_inspection_type_distribution(start_date=None, end_date=None, user=None):
         """获取巡检结果类型分布"""
         query = AnalysisResult.query
@@ -527,14 +507,14 @@ class DashboardService:
 
         results = query.all()
 
-        # 拥堵程度统计
+        # 拥堵程度统计（与inspection_results.py保持一致）
         congestion_stats = {
             '轻度 (light)': 0,
             '中度 (medium)': 0,
             '重度 (heavy)': 0
         }
         
-        # 破损程度统计
+        # 破损程度统计（与inspection_results.py保持一致）
         damage_stats = {
             '无破损': 0,
             '轻度破损': 0,
@@ -543,18 +523,16 @@ class DashboardService:
         }
 
         for result in results:
-            # 根据target_type判断事件类型并统计
+            # 根据target_type判断事件类型并统计（与inspection_results.py逻辑一致）
             if result.target_type in congestion_stats:
                 congestion_stats[result.target_type] += 1
             elif result.target_type in damage_stats:
                 damage_stats[result.target_type] += 1
             elif '(' in result.target_type:
-                # 其他包含括号的类型归类为交通拥堵
-                # 不增加具体统计，但计入总数
+                # 其他包含括号的类型归类为交通拥堵，但不计入具体统计
                 pass
             else:
-                # 其他类型归类为道路破损
-                # 不增加具体统计，但计入总数
+                # 其他类型归类为道路破损，但不计入具体统计
                 pass
 
         # 合并统计数据
@@ -580,13 +558,11 @@ class DashboardService:
         inspection_stats = DashboardService.get_inspection_results_statistics(start_date, end_date, user)
         inspection_trend = DashboardService.get_inspection_results_trend(start_date=start_date, end_date=end_date, user=user)
         inspection_results = DashboardService.get_inspection_results(start_date, end_date, user)
-        problem_sections = DashboardService.get_problem_sections(start_date, end_date, user)
 
         return {
             'flight_statistics': flight_stats,
             'airspace_usage': airspace_stats,
             'inspection_statistics': inspection_stats,  
             'inspection_trend': inspection_trend,
-            'inspection_results': inspection_results,
-            'problem_sections': problem_sections
+            'inspection_results': inspection_results
         }
